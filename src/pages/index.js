@@ -58,6 +58,158 @@ function LabelThumbnail({ src, size = 48, expandable = true }) {
   );
 }
 
+// Styled label card - recreates the label's visual design
+function LabelCard({ coffee, size = "medium" }) {
+  const design = coffee.labelDesign || {};
+  const bgColor = design.bgColor || coffee.bagColor || "#8B7355";
+  const accentColor = design.accentColor || bgColor;
+
+  // Determine if bg is dark (for fallback text contrast)
+  const isDark = (hex) => {
+    if (!hex || !hex.startsWith("#")) return true;
+    const c = hex.replace("#", "");
+    const r = parseInt(c.substr(0, 2), 16);
+    const g = parseInt(c.substr(2, 2), 16);
+    const b = parseInt(c.substr(4, 2), 16);
+    return (r * 0.299 + g * 0.587 + b * 0.114) < 140;
+  };
+
+  const textColor = design.textColor || (isDark(bgColor) ? "#FFFFFF" : "#1A1A1A");
+  const subtextColor = isDark(bgColor) ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
+
+  // Font mapping based on label style
+  const fontMap = {
+    serif: "'Playfair Display', Georgia, serif",
+    "sans-serif": "'Inter', -apple-system, sans-serif",
+    script: "'Dancing Script', cursive, serif",
+    handwritten: "'Caveat', 'Dancing Script', cursive",
+    display: "'Bebas Neue', 'Impact', sans-serif",
+  };
+  const nameFont = fontMap[design.nameStyle] || fontMap.serif;
+
+  // Weight mapping
+  const weightMap = { light: 300, normal: 400, bold: 700, black: 900 };
+  const nameWeight = weightMap[design.nameWeight] || 700;
+
+  // Text transform based on case
+  const caseMap = { uppercase: "uppercase", lowercase: "lowercase", capitalize: "capitalize", mixed: "none" };
+  const nameCase = caseMap[design.nameCase] || "none";
+
+  // Alignment
+  const alignMap = { centered: "center", left: "flex-start", minimal: "center" };
+  const align = alignMap[design.layout] || "center";
+  const textAlign = design.layout === "left" ? "left" : "center";
+
+  const sizes = {
+    small: { width: 64, padding: 6, nameSize: 10, subSize: 7, roasterSize: 6 },
+    medium: { width: 80, padding: 8, nameSize: 12, subSize: 8, roasterSize: 7 },
+    large: { width: 120, padding: 12, nameSize: 16, subSize: 10, roasterSize: 9 },
+  };
+  const s = sizes[size] || sizes.medium;
+
+  // Aesthetic-based styling
+  const isMinimal = design.aesthetic === "minimalist" || design.aesthetic === "modern";
+  const isRustic = design.aesthetic === "rustic" || design.aesthetic === "artisan" || design.aesthetic === "vintage";
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: s.width,
+        minHeight: s.width,
+        background: bgColor,
+        borderRadius: isMinimal ? 4 : 8,
+        padding: s.padding,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: align,
+        textAlign,
+        boxShadow: isMinimal
+          ? "0 1px 3px rgba(0,0,0,0.1)"
+          : "0 2px 8px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1)",
+        border: accentColor !== bgColor ? `2px solid ${accentColor}` : `1px solid rgba(0,0,0,0.1)`,
+        flexShrink: 0,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      {/* Texture for rustic/artisan */}
+      {isRustic && (
+        <div style={{
+          position: "absolute", inset: 0, opacity: 0.06,
+          background: "repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)",
+          pointerEvents: "none",
+        }} />
+      )}
+
+      {/* Roaster name */}
+      {coffee.roaster && (
+        <div style={{
+          fontSize: s.roasterSize,
+          fontWeight: 500,
+          color: subtextColor,
+          textTransform: "uppercase",
+          letterSpacing: "0.8px",
+          marginBottom: 2,
+          lineHeight: 1.2,
+          maxWidth: "100%",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          fontFamily: "'Inter', sans-serif",
+        }}>
+          {coffee.roaster}
+        </div>
+      )}
+
+      {/* Coffee name - styled to match original */}
+      <div style={{
+        fontSize: s.nameSize,
+        fontWeight: nameWeight,
+        color: textColor,
+        lineHeight: 1.1,
+        marginBottom: 4,
+        fontFamily: nameFont,
+        textTransform: nameCase,
+        letterSpacing: design.nameStyle === "display" ? "1px" : "0",
+        wordBreak: "break-word",
+        hyphens: "auto",
+      }}>
+        {coffee.name || "Unnamed"}
+      </div>
+
+      {/* Origin */}
+      {(coffee.country || coffee.region) && (
+        <div style={{
+          fontSize: s.subSize,
+          color: subtextColor,
+          lineHeight: 1.2,
+          marginBottom: 1,
+          fontFamily: "'Inter', sans-serif",
+        }}>
+          {[coffee.country, coffee.region].filter(Boolean).join(" · ")}
+        </div>
+      )}
+
+      {/* Process */}
+      {coffee.process && (
+        <div style={{
+          fontSize: s.subSize - 1,
+          color: subtextColor,
+          lineHeight: 1.2,
+          fontStyle: isRustic ? "italic" : "normal",
+          textTransform: isMinimal ? "uppercase" : "none",
+          letterSpacing: isMinimal ? "0.5px" : "0",
+          fontFamily: "'Inter', sans-serif",
+        }}>
+          {coffee.process}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Stars({ value, onChange, size = 16 }) {
   const [h, setH] = useState(null);
   const d = h ?? value;
@@ -581,6 +733,9 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#F5F0EB" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Caveat:wght@400;700&family=Dancing+Script:wght@400;700&family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet" />
       </Head>
 
       <div style={{ minHeight: "100vh", paddingBottom: 80 }}>
@@ -613,7 +768,7 @@ export default function Home() {
                       <div key={active.id} style={{ background: "var(--active-bg)", border: "1.5px solid var(--active)", borderRadius: 10, padding: "16px 18px", marginBottom: 12 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                           <div style={{ display: "flex", gap: 12, flex: 1 }}>
-                            {active.labelImage && <LabelThumbnail src={active.labelImage} size={64} />}
+                            {(active.labelDesign || active.bagColor) ? <LabelCard coffee={active} size="large" /> : active.labelImage && <LabelThumbnail src={active.labelImage} size={64} />}
                             <div>
                               <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{active.name || "Unnamed"}</div>
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
@@ -670,7 +825,7 @@ export default function Home() {
                   {frozen.slice(0, 3).map((c) => (
                     <div key={c.id} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                        {c.labelImage && <LabelThumbnail src={c.labelImage} size={44} />}
+                        {(c.labelDesign || c.bagColor) ? <LabelCard coffee={c} size="small" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={44} />}
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 14, fontWeight: 600 }}>{c.name || "Unnamed"}</div>
                           <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.country}{c.variety ? ` · ${c.variety}` : ""} · {rp(c)} portion{rp(c) !== 1 ? "s" : ""} · {rg(c)}g</div>
@@ -715,7 +870,7 @@ export default function Home() {
                 return (
                   <div key={c.id} onClick={() => setExpanded(isExp ? null : c.id)} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", marginBottom: 10, cursor: "pointer", boxShadow: isExp ? "0 3px 16px rgba(92,45,14,0.06)" : "none" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                      {c.labelImage && <LabelThumbnail src={c.labelImage} size={56} />}
+                      {(c.labelDesign || c.bagColor) ? <LabelCard coffee={c} size="medium" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={56} />}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, marginBottom: 3 }}>
                           {c.name || "Unnamed"} {c.favorite && <span style={{ color: "var(--star)", fontSize: 13 }}>★</span>}
@@ -749,9 +904,10 @@ export default function Home() {
                     </div>
                     {isExp && (
                       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-                        {c.labelImage && (
-                          <div style={{ marginBottom: 12, display: "flex", justifyContent: "center" }}>
-                            <LabelThumbnail src={c.labelImage} size={120} />
+                        {(c.labelDesign || c.bagColor || c.labelImage) && (
+                          <div style={{ marginBottom: 12, display: "flex", justifyContent: "center", gap: 12, alignItems: "center" }}>
+                            {(c.labelDesign || c.bagColor) && <LabelCard coffee={c} size="large" />}
+                            {c.labelImage && <LabelThumbnail src={c.labelImage} size={80} />}
                           </div>
                         )}
                         {c.espresso && (c.espresso.dose || c.espresso.yield || c.espresso.totalTime || c.espresso.time || c.espresso.grind) && (

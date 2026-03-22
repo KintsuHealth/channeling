@@ -35,11 +35,11 @@ export default async function handler(req, res) {
             },
             {
               type: "text",
-              text: `You are a coffee bag label parser. Analyze this coffee bag image and extract every detail visible on the label.
+              text: `You are a coffee bag label parser and design analyzer. Extract label info AND visual design details to recreate the label digitally.
 
 Return ONLY a raw JSON object — no markdown, no backticks, no explanation:
 {
-  "name": "coffee name or blend",
+  "name": "coffee name or blend (exactly as written on label)",
   "country": "origin country",
   "region": "specific region",
   "variety": "coffee variety (Bourbon, Typica, Geisha, Tabi, SL28, Caturra, etc.)",
@@ -51,10 +51,21 @@ Return ONLY a raw JSON object — no markdown, no backticks, no explanation:
   "weight": "bag weight with unit (e.g. 300g, 250g, 12oz, 1lb)",
   "price": "price if visible",
   "tastingNotes": "tasting notes / cup profile / flavor descriptors",
-  "rawNotes": "harvest date, certifications, or any other notable text"
+  "rawNotes": "harvest date, certifications, or any other notable text",
+  "labelDesign": {
+    "bgColor": "label/bag background color as hex (e.g. #C41E3A)",
+    "textColor": "main text color as hex (e.g. #FFFFFF)",
+    "accentColor": "accent/secondary color as hex, or null",
+    "nameStyle": "serif, sans-serif, script, handwritten, or display",
+    "nameWeight": "light, normal, bold, or black",
+    "nameCase": "uppercase, lowercase, capitalize, or mixed",
+    "layout": "centered, left, or minimal",
+    "hasLogo": true or false,
+    "aesthetic": "modern, rustic, elegant, playful, minimalist, vintage, or artisan"
+  }
 }
 
-Use null for any field not visible or confidently inferrable. Be precise.`,
+Be precise with hex colors. For nameStyle, pick the closest match. The goal is to recreate the label's visual feel digitally.`,
             },
           ],
         },
