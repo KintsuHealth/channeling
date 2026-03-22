@@ -431,6 +431,85 @@ const compressImage = (file, maxSizeBytes = 4 * 1024 * 1024) => {
   });
 };
 
+// Crop label from image using bounds from AI
+const cropLabel = (imageSrc, bounds, borderColor) => {
+  return new Promise((resolve) => {
+    if (!bounds || !bounds.width || !bounds.height) {
+      resolve(null);
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const { width: imgW, height: imgH } = img;
+
+      // Calculate pixel coordinates from percentage bounds
+      const x = Math.round(bounds.x * imgW);
+      const y = Math.round(bounds.y * imgH);
+      const w = Math.round(bounds.width * imgW);
+      const h = Math.round(bounds.height * imgH);
+      const rotation = bounds.rotation || 0;
+
+      // Add padding for border
+      const padding = 8;
+      const borderWidth = 4;
+
+      // Create canvas for cropped label
+      const canvas = document.createElement("canvas");
+      const outputW = w + (padding + borderWidth) * 2;
+      const outputH = h + (padding + borderWidth) * 2;
+
+      // Handle rotation
+      if (Math.abs(rotation) > 1) {
+        const rad = (rotation * Math.PI) / 180;
+        const cos = Math.abs(Math.cos(rad));
+        const sin = Math.abs(Math.sin(rad));
+        canvas.width = Math.round(w * cos + h * sin) + (padding + borderWidth) * 2;
+        canvas.height = Math.round(h * cos + w * sin) + (padding + borderWidth) * 2;
+      } else {
+        canvas.width = outputW;
+        canvas.height = outputH;
+      }
+
+      const ctx = canvas.getContext("2d");
+
+      // Fill with border color
+      ctx.fillStyle = borderColor || "#FFFFFF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw white inner background
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(borderWidth, borderWidth, canvas.width - borderWidth * 2, canvas.height - borderWidth * 2);
+
+      // Apply rotation if needed
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      if (Math.abs(rotation) > 1) {
+        ctx.rotate((-rotation * Math.PI) / 180);
+      }
+
+      // Draw cropped region
+      ctx.drawImage(
+        img,
+        x, y, w, h,
+        -w / 2, -h / 2, w, h
+      );
+      ctx.restore();
+
+      // Add subtle shadow effect
+      ctx.shadowColor = "rgba(0,0,0,0.1)";
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 2;
+
+      // Convert to data URL
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
+    };
+    img.onerror = () => resolve(null);
+    img.src = imageSrc;
+  });
+};
+
 const EMPTY = { name: "", country: "", region: "", variety: "", producer: "", roaster: "", roastLevel: "", process: "", altitude: "", weight: "", price: "", tastingNotes: "", roastDate: "" };
 
 const COMMON_WEIGHTS = ["250", "300", "340", "500", "1000"];
@@ -606,6 +685,7 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
   const [parsed, setParsed] = useState(null);
+  const [croppedLabel, setCroppedLabel] = useState(null);
   const [manualMode, setManualMode] = useState(false);
   const [pendingRating, setPendingRating] = useState(0);
   const [view, setView] = useState("morning");
@@ -681,6 +761,7 @@ export default function Home() {
     });
 
     setScanning(true);
+    setCroppedLabel(null);
     try {
       const resp = await fetch("/api/scan", {
         method: "POST",
@@ -689,6 +770,21 @@ export default function Home() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || `Server error ${resp.status}`);
+
+      // Crop the label using bounds from AI
+      if (data.labelBounds) {
+        const previewDataUrl = await new Promise((res) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result);
+          r.readAsDataURL(processedFile);
+        });
+        const borderColor = data.labelDesign?.bgColor || data.labelDesign?.borderColor || "#C41E3A";
+        const cropped = await cropLabel(previewDataUrl, data.labelBounds, borderColor);
+        if (cropped) {
+          setCroppedLabel(cropped);
+        }
+      }
+
       setParsed(data);
     } catch (err) {
       setError(`Scan failed: ${err.message}`);
@@ -706,12 +802,13 @@ export default function Home() {
       frozenAt: new Date().toISOString(), rating: rating || 0,
       gramsTotal: grams, portions: plan.portions, portionIndex: 0, dosesUsed: 0,
       status: "frozen", espresso: null, favorite: false, doseG,
-      labelImage: preview, // Store the scanned label image
+      labelImage: preview, // Store the full scanned image
+      croppedLabel: croppedLabel, // Store the cropped label
     }, ...prev]);
-    setParsed(null); setPreview(null); setPendingRating(0); setManualMode(false); setError(null); setView("freezer");
+    setParsed(null); setPreview(null); setCroppedLabel(null); setPendingRating(0); setManualMode(false); setError(null); setView("freezer");
   };
 
-  const resetScan = () => { setParsed(null); setPreview(null); setManualMode(false); setError(null); };
+  const resetScan = () => { setParsed(null); setPreview(null); setCroppedLabel(null); setManualMode(false); setError(null); };
   const handleDrop = useCallback((e) => { e.preventDefault(); handleFile(e.dataTransfer?.files?.[0]); }, [handleFile]);
   const rp = (c) => c.portions.length - c.portionIndex;
   const rg = (c) => c.portions.slice(c.portionIndex).reduce((s, p) => s + p.grams, 0);
@@ -768,7 +865,7 @@ export default function Home() {
                       <div key={active.id} style={{ background: "var(--active-bg)", border: "1.5px solid var(--active)", borderRadius: 10, padding: "16px 18px", marginBottom: 12 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                           <div style={{ display: "flex", gap: 12, flex: 1 }}>
-                            {(active.labelDesign || active.bagColor) ? <LabelCard coffee={active} size="large" /> : active.labelImage && <LabelThumbnail src={active.labelImage} size={64} />}
+                            {active.croppedLabel ? <LabelThumbnail src={active.croppedLabel} size={80} /> : (active.labelDesign || active.bagColor) ? <LabelCard coffee={active} size="large" /> : active.labelImage && <LabelThumbnail src={active.labelImage} size={64} />}
                             <div>
                               <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{active.name || "Unnamed"}</div>
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
@@ -825,7 +922,7 @@ export default function Home() {
                   {frozen.slice(0, 3).map((c) => (
                     <div key={c.id} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                        {(c.labelDesign || c.bagColor) ? <LabelCard coffee={c} size="small" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={44} />}
+                        {c.croppedLabel ? <LabelThumbnail src={c.croppedLabel} size={52} /> : (c.labelDesign || c.bagColor) ? <LabelCard coffee={c} size="small" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={44} />}
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 14, fontWeight: 600 }}>{c.name || "Unnamed"}</div>
                           <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.country}{c.variety ? ` · ${c.variety}` : ""} · {rp(c)} portion{rp(c) !== 1 ? "s" : ""} · {rg(c)}g</div>
@@ -870,7 +967,7 @@ export default function Home() {
                 return (
                   <div key={c.id} onClick={() => setExpanded(isExp ? null : c.id)} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", marginBottom: 10, cursor: "pointer", boxShadow: isExp ? "0 3px 16px rgba(92,45,14,0.06)" : "none" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                      {(c.labelDesign || c.bagColor) ? <LabelCard coffee={c} size="medium" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={56} />}
+                      {c.croppedLabel ? <LabelThumbnail src={c.croppedLabel} size={64} /> : (c.labelDesign || c.bagColor) ? <LabelCard coffee={c} size="medium" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={56} />}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, marginBottom: 3 }}>
                           {c.name || "Unnamed"} {c.favorite && <span style={{ color: "var(--star)", fontSize: 13 }}>★</span>}
@@ -904,9 +1001,13 @@ export default function Home() {
                     </div>
                     {isExp && (
                       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-                        {(c.labelDesign || c.bagColor || c.labelImage) && (
+                        {(c.croppedLabel || c.labelDesign || c.bagColor || c.labelImage) && (
                           <div style={{ marginBottom: 12, display: "flex", justifyContent: "center", gap: 12, alignItems: "center" }}>
-                            {(c.labelDesign || c.bagColor) && <LabelCard coffee={c} size="large" />}
+                            {c.croppedLabel ? (
+                              <LabelThumbnail src={c.croppedLabel} size={140} />
+                            ) : (c.labelDesign || c.bagColor) ? (
+                              <LabelCard coffee={c} size="large" />
+                            ) : null}
                             {c.labelImage && <LabelThumbnail src={c.labelImage} size={80} />}
                           </div>
                         )}

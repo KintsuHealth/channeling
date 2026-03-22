@@ -35,7 +35,7 @@ export default async function handler(req, res) {
             },
             {
               type: "text",
-              text: `You are a coffee bag label parser and design analyzer. Extract label info AND visual design details to recreate the label digitally.
+              text: `You are a coffee bag label parser. Extract label info AND the label's position in the image for cropping.
 
 Return ONLY a raw JSON object — no markdown, no backticks, no explanation:
 {
@@ -52,20 +52,27 @@ Return ONLY a raw JSON object — no markdown, no backticks, no explanation:
   "price": "price if visible",
   "tastingNotes": "tasting notes / cup profile / flavor descriptors",
   "rawNotes": "harvest date, certifications, or any other notable text",
+  "labelBounds": {
+    "x": 0.15,
+    "y": 0.45,
+    "width": 0.70,
+    "height": 0.40,
+    "rotation": 0
+  },
   "labelDesign": {
-    "bgColor": "label/bag background color as hex (e.g. #C41E3A)",
-    "textColor": "main text color as hex (e.g. #FFFFFF)",
-    "accentColor": "accent/secondary color as hex, or null",
-    "nameStyle": "serif, sans-serif, script, handwritten, or display",
-    "nameWeight": "light, normal, bold, or black",
-    "nameCase": "uppercase, lowercase, capitalize, or mixed",
-    "layout": "centered, left, or minimal",
-    "hasLogo": true or false,
-    "aesthetic": "modern, rustic, elegant, playful, minimalist, vintage, or artisan"
+    "bgColor": "#C41E3A",
+    "borderColor": "#FFFFFF"
   }
 }
 
-Be precise with hex colors. For nameStyle, pick the closest match. The goal is to recreate the label's visual feel digitally.`,
+CRITICAL for labelBounds: Identify the main information label/sticker on the coffee bag (the part with coffee name, origin, process details). Return coordinates as DECIMALS from 0 to 1 representing percentage of image dimensions:
+- x: left edge of label (0 = left side of image, 1 = right side)
+- y: top edge of label (0 = top of image, 1 = bottom)
+- width: label width as fraction of image width
+- height: label height as fraction of image height
+- rotation: degrees of rotation needed to straighten (negative = clockwise, positive = counter-clockwise)
+
+Be precise with the bounds - we will crop this exact region. For labelDesign, extract the bag's main color and any border/accent color.`,
             },
           ],
         },
