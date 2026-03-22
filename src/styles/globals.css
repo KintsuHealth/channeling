@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #F5F0EB;
+  --card: #FFFFFF;
+  --accent: #8B4513;
+  --accent-light: #C4956A;
+  --accent-dark: #5C2D0E;
+  --text: #2C1810;
+  --muted: #8C7B6F;
+  --border: #E8DDD3;
+  --success: #4A7C59;
+  --error: #A0522D;
+  --tag: #F0E6DA;
+  --star: #D4A054;
+  --star-off: #DDD5CB;
+  --ice: #7BA7C4;
+  --ice-bg: #EBF3F8;
+  --active: #E8763A;
+  --active-bg: #FDF3ED;
+  --done: #B8AFA6;
+  --buffer: #8B9E6B;
+  --buffer-bg: #F2F5ED;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', 'Helvetica Neue', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+button { cursor: pointer; transition: opacity 0.15s; }
+button:hover { opacity: 0.85; }
+input:focus, textarea:focus { outline: none; border-color: var(--accent-light) !important; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
