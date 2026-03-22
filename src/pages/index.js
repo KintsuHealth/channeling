@@ -19,6 +19,45 @@ function Badge({ children, bg }) {
   );
 }
 
+function LabelThumbnail({ src, size = 48, expandable = true }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!src) return null;
+  return (
+    <>
+      <div
+        onClick={expandable ? (e) => { e.stopPropagation(); setExpanded(true); } : undefined}
+        style={{
+          width: size, height: size, borderRadius: 6, overflow: "hidden",
+          border: "1.5px solid var(--border)", cursor: expandable ? "pointer" : "default",
+          flexShrink: 0, boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+        }}
+      >
+        <img src={src} alt="Coffee label" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </div>
+      {expanded && (
+        <div
+          onClick={(e) => { e.stopPropagation(); setExpanded(false); }}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 1000, padding: 20, cursor: "pointer",
+          }}
+        >
+          <img src={src} alt="Coffee label" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8, objectFit: "contain" }} />
+          <button
+            onClick={(e) => { e.stopPropagation(); setExpanded(false); }}
+            style={{
+              position: "absolute", top: 20, right: 20, width: 40, height: 40,
+              background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%",
+              color: "#fff", fontSize: 20, cursor: "pointer",
+            }}
+          >✕</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 function Stars({ value, onChange, size = 16 }) {
   const [h, setH] = useState(null);
   const d = h ?? value;
@@ -89,9 +128,15 @@ function DoseTracker({ portion, dosesUsed, onChange, doseG = DEFAULT_DOSE_G }) {
 
 function EspressoRecipe({ recipe, onChange }) {
   const [editing, setEditing] = useState(false);
-  const [loc, setLoc] = useState(recipe || { dose: "", yield: "", time: "", grind: "", feedSpeed: "", temp: "", preInfuse: "", notes: "" });
-  const save = () => { onChange(loc); setEditing(false); };
-  const has = recipe && (recipe.dose || recipe.yield || recipe.time);
+  const [tempUnit, setTempUnit] = useState("C");
+  const [loc, setLoc] = useState(recipe || { dose: "", yield: "", preInfuse: "", brewTime: "", totalTime: "", grind: "", feedSpeed: "", temp: "", notes: "" });
+  const save = () => { onChange({ ...loc, tempUnit }); setEditing(false); };
+  const has = recipe && (recipe.dose || recipe.yield || recipe.totalTime || recipe.grind);
+
+  const inputStyle = { width: "100%", padding: "5px 6px", border: "1px solid var(--border)", borderRadius: 4, fontSize: 12, background: "#fff", color: "var(--text)", fontFamily: "'DM Mono', monospace" };
+  const labelStyle = { fontSize: 9, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 2 };
+  const sectionStyle = { marginBottom: 10, padding: "8px", background: "#fff", borderRadius: 6, border: "1px solid var(--border)" };
+  const sectionTitleStyle = { fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 };
 
   if (!editing && !has) return (
     <button onClick={(e) => { e.stopPropagation(); setEditing(true); }} style={{ marginTop: 8, padding: "6px 12px", background: "none", border: "1px dashed var(--border)", borderRadius: 6, fontSize: 11, color: "var(--muted)", width: "100%", textAlign: "left" }}>+ Espresso recipe</button>
@@ -99,37 +144,100 @@ function EspressoRecipe({ recipe, onChange }) {
 
   if (editing) return (
     <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10, padding: 12, background: "#FAF7F4", borderRadius: 8, border: "1px solid var(--border)" }}>
-      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 8 }}>Espresso Recipe</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 8 }}>
-        {[["dose", "Dose (g)", "18"], ["yield", "Yield (g)", "36"], ["time", "Time (s)", "28"], ["grind", "Grind", "2.5"], ["feedSpeed", "Feed", "5"], ["temp", "Temp (°C)", "93"], ["preInfuse", "Pre-inf (s)", "5"]].map(([k, l, ph]) => (
-          <div key={k}>
-            <label style={{ fontSize: 9, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 2 }}>{l}</label>
-            <input value={loc[k] || ""} onChange={(e) => setLoc({ ...loc, [k]: e.target.value })} placeholder={ph}
-              style={{ width: "100%", padding: "5px 6px", border: "1px solid var(--border)", borderRadius: 4, fontSize: 12, background: "#fff", color: "var(--text)", fontFamily: "'DM Mono', monospace" }} />
-          </div>
-        ))}
+      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 10 }}>Espresso Recipe</div>
+
+      {/* Dose & Yield */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+        <div>
+          <label style={labelStyle}>Dose (g)</label>
+          <input value={loc.dose || ""} onChange={(e) => setLoc({ ...loc, dose: e.target.value })} placeholder="18" style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Yield (g)</label>
+          <input value={loc.yield || ""} onChange={(e) => setLoc({ ...loc, yield: e.target.value })} placeholder="36" style={inputStyle} />
+        </div>
       </div>
-      <textarea value={loc.notes} onChange={(e) => setLoc({ ...loc, notes: e.target.value })} placeholder="Channeling, taste, pressure…" rows={2}
+
+      {/* Time Section */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>⏱ Time</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+          <div>
+            <label style={labelStyle}>Pre-infusion (s)</label>
+            <input value={loc.preInfuse || ""} onChange={(e) => setLoc({ ...loc, preInfuse: e.target.value })} placeholder="5" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Brew (s)</label>
+            <input value={loc.brewTime || ""} onChange={(e) => setLoc({ ...loc, brewTime: e.target.value })} placeholder="23" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Total (s)</label>
+            <input value={loc.totalTime || ""} onChange={(e) => setLoc({ ...loc, totalTime: e.target.value })} placeholder="28" style={inputStyle} />
+          </div>
+        </div>
+      </div>
+
+      {/* Grinder Section */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>⚙ Grinder</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          <div>
+            <label style={labelStyle}>Grind Setting</label>
+            <input value={loc.grind || ""} onChange={(e) => setLoc({ ...loc, grind: e.target.value })} placeholder="2.5" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Feed Speed</label>
+            <select value={loc.feedSpeed || ""} onChange={(e) => setLoc({ ...loc, feedSpeed: e.target.value })} style={{ ...inputStyle, fontFamily: "inherit" }}>
+              <option value="">Select...</option>
+              <option value="slow">Slow</option>
+              <option value="medium">Medium</option>
+              <option value="fast">Fast</option>
+              <option value="auto">Auto</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Temperature Section */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>🌡 Temperature</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Temp</label>
+            <input value={loc.temp || ""} onChange={(e) => setLoc({ ...loc, temp: e.target.value })} placeholder={tempUnit === "C" ? "93" : "200"} style={inputStyle} />
+          </div>
+          <div style={{ display: "flex", gap: 2 }}>
+            <button type="button" onClick={() => setTempUnit("C")} style={{ padding: "5px 10px", background: tempUnit === "C" ? "var(--accent-dark)" : "#fff", color: tempUnit === "C" ? "#fff" : "var(--muted)", border: "1px solid var(--border)", borderRadius: "4px 0 0 4px", fontSize: 11, fontWeight: 600 }}>°C</button>
+            <button type="button" onClick={() => setTempUnit("F")} style={{ padding: "5px 10px", background: tempUnit === "F" ? "var(--accent-dark)" : "#fff", color: tempUnit === "F" ? "#fff" : "var(--muted)", border: "1px solid var(--border)", borderRadius: "0 4px 4px 0", fontSize: 11, fontWeight: 600 }}>°F</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Notes */}
+      <textarea value={loc.notes || ""} onChange={(e) => setLoc({ ...loc, notes: e.target.value })} placeholder="Channeling, taste, pressure notes…" rows={2}
         style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--border)", borderRadius: 4, fontSize: 11, resize: "vertical", background: "#fff", color: "var(--text)" }} />
-      <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-        <button onClick={() => setEditing(false)} style={{ padding: "5px 12px", background: "none", border: "1px solid var(--border)", borderRadius: 5, fontSize: 11, color: "var(--muted)" }}>Cancel</button>
-        <button onClick={save} style={{ padding: "5px 12px", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 600 }}>Save</button>
+
+      <div style={{ display: "flex", gap: 6, marginTop: 10, justifyContent: "flex-end" }}>
+        <button onClick={() => setEditing(false)} style={{ padding: "6px 14px", background: "none", border: "1px solid var(--border)", borderRadius: 5, fontSize: 11, color: "var(--muted)" }}>Cancel</button>
+        <button onClick={save} style={{ padding: "6px 14px", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 600 }}>Save Recipe</button>
       </div>
     </div>
   );
 
+  // Display existing recipe - make it prominent
   return (
-    <div onClick={(e) => { e.stopPropagation(); setEditing(true); }} style={{ marginTop: 10, padding: 10, background: "#FAF7F4", borderRadius: 7, border: "1px solid var(--border)", cursor: "pointer" }}>
-      <div style={{ display: "flex", gap: 12, fontSize: 12, fontFamily: "'DM Mono', monospace", flexWrap: "wrap" }}>
-        {recipe.dose && <span>{recipe.dose}g in</span>}
-        {recipe.yield && <span>{recipe.yield}g out</span>}
-        {recipe.time && <span>{recipe.time}s</span>}
-        {recipe.grind && <span>@{recipe.grind}</span>}
-        {recipe.feedSpeed && <span>feed:{recipe.feedSpeed}</span>}
-        {recipe.temp && <span>{recipe.temp}°</span>}
-        {recipe.preInfuse && <span>pre:{recipe.preInfuse}s</span>}
+    <div onClick={(e) => { e.stopPropagation(); setEditing(true); }} style={{ marginTop: 10, padding: 12, background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)", borderRadius: 8, border: "2px solid var(--accent-light, #E8D5C4)", cursor: "pointer", boxShadow: "0 2px 8px rgba(92,45,14,0.08)" }}>
+      <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 }}>☕ Saved Recipe — tap to edit</div>
+      <div style={{ display: "flex", gap: 10, fontSize: 13, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--text)", fontWeight: 500 }}>
+        {recipe.dose && <span>{recipe.dose}g →</span>}
+        {recipe.yield && <span>{recipe.yield}g</span>}
       </div>
-      {recipe.notes && <div style={{ marginTop: 4, fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>{recipe.notes}</div>}
+      <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--muted)", marginTop: 4 }}>
+        {recipe.totalTime && <span>⏱ {recipe.totalTime}s{recipe.preInfuse ? ` (pre:${recipe.preInfuse}s)` : ""}{recipe.brewTime ? ` (brew:${recipe.brewTime}s)` : ""}</span>}
+        {recipe.grind && <span>⚙ @{recipe.grind}{recipe.feedSpeed ? ` · ${recipe.feedSpeed}` : ""}</span>}
+        {recipe.temp && <span>🌡 {recipe.temp}°{recipe.tempUnit || "C"}</span>}
+      </div>
+      {recipe.notes && <div style={{ marginTop: 6, fontSize: 11, color: "var(--muted)", fontStyle: "italic", borderTop: "1px solid var(--border)", paddingTop: 6 }}>"{recipe.notes}"</div>}
     </div>
   );
 }
@@ -446,6 +554,7 @@ export default function Home() {
       frozenAt: new Date().toISOString(), rating: rating || 0,
       gramsTotal: grams, portions: plan.portions, portionIndex: 0, dosesUsed: 0,
       status: "frozen", espresso: null, favorite: false, doseG,
+      labelImage: preview, // Store the scanned label image
     }, ...prev]);
     setParsed(null); setPreview(null); setPendingRating(0); setManualMode(false); setError(null); setView("freezer");
   };
@@ -503,14 +612,17 @@ export default function Home() {
                     return (
                       <div key={active.id} style={{ background: "var(--active-bg)", border: "1.5px solid var(--active)", borderRadius: 10, padding: "16px 18px", marginBottom: 12 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <div>
-                            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{active.name || "Unnamed"}</div>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
-                              {active.country && <Badge>{active.country}</Badge>}
-                              {active.variety && <Badge bg="#EDE0D0">{active.variety}</Badge>}
-                              {active.roastLevel && <Badge bg="#E5DDD4">{active.roastLevel}</Badge>}
+                          <div style={{ display: "flex", gap: 12, flex: 1 }}>
+                            {active.labelImage && <LabelThumbnail src={active.labelImage} size={64} />}
+                            <div>
+                              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{active.name || "Unnamed"}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
+                                {active.country && <Badge>{active.country}</Badge>}
+                                {active.variety && <Badge bg="#EDE0D0">{active.variety}</Badge>}
+                                {active.roastLevel && <Badge bg="#E5DDD4">{active.roastLevel}</Badge>}
+                              </div>
+                              <Stars value={active.rating || 0} onChange={(r) => update(active.id, { rating: r })} />
                             </div>
-                            <Stars value={active.rating || 0} onChange={(r) => update(active.id, { rating: r })} />
                           </div>
                           <div style={{ textAlign: "right", fontSize: 11, color: "var(--muted)" }}>
                             <div style={{ fontSize: 20, fontWeight: 700, color: "var(--active)" }}>~{gramsLeft}g</div>
@@ -557,7 +669,8 @@ export default function Home() {
                   <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--ice)", marginBottom: 10 }}>❄ Up Next</div>
                   {frozen.slice(0, 3).map((c) => (
                     <div key={c.id} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                        {c.labelImage && <LabelThumbnail src={c.labelImage} size={44} />}
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 14, fontWeight: 600 }}>{c.name || "Unnamed"}</div>
                           <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.country}{c.variety ? ` · ${c.variety}` : ""} · {rp(c)} portion{rp(c) !== 1 ? "s" : ""} · {rg(c)}g</div>
@@ -571,13 +684,12 @@ export default function Home() {
                       {c.espresso && (c.espresso.dose || c.espresso.grind) && (
                         <div style={{ marginTop: 8, padding: "6px 8px", background: "#FAF7F4", borderRadius: 5, fontSize: 11, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
                           <span style={{ fontSize: 9, fontWeight: 600, color: "var(--accent)", marginRight: 6 }}>RECIPE:</span>
-                          {c.espresso.dose && <span>{c.espresso.dose}g in </span>}
-                          {c.espresso.yield && <span>{c.espresso.yield}g out </span>}
-                          {c.espresso.time && <span>{c.espresso.time}s </span>}
-                          {c.espresso.grind && <span>@{c.espresso.grind} </span>}
-                          {c.espresso.feedSpeed && <span>feed:{c.espresso.feedSpeed} </span>}
-                          {c.espresso.temp && <span>{c.espresso.temp}° </span>}
-                          {c.espresso.preInfuse && <span>pre:{c.espresso.preInfuse}s</span>}
+                          {c.espresso.dose && <span>{c.espresso.dose}g → </span>}
+                          {c.espresso.yield && <span>{c.espresso.yield}g </span>}
+                          {(c.espresso.totalTime || c.espresso.time) && <span>⏱{c.espresso.totalTime || c.espresso.time}s </span>}
+                          {c.espresso.grind && <span>⚙@{c.espresso.grind} </span>}
+                          {c.espresso.feedSpeed && <span>{c.espresso.feedSpeed} </span>}
+                          {c.espresso.temp && <span>🌡{c.espresso.temp}°{c.espresso.tempUnit || ""}</span>}
                         </div>
                       )}
                     </div>
@@ -589,16 +701,21 @@ export default function Home() {
           )}
 
           {/* ─── FREEZER ─── */}
-          {view === "freezer" && (
+          {view === "freezer" && (() => {
+            // Include remaining portions from active coffees
+            const activeWithRemaining = activeCoffees.filter(c => c.portionIndex + 1 < c.portions.length);
+            const allFreezerItems = [...frozen, ...activeWithRemaining.map(c => ({ ...c, isActiveRemaining: true }))];
+            return (
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--ice)", marginBottom: 12 }}>❄ Freezer — {totalFrozenGrams}g · {totalFrozenDoses} doses</div>
-              {frozen.length === 0 ? (
+              {allFreezerItems.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", fontSize: 13 }}>Freezer empty.<br /><button onClick={() => setView("scan")} style={{ marginTop: 12, padding: "8px 20px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>Scan a bag</button></div>
-              ) : frozen.map((c) => {
+              ) : allFreezerItems.map((c) => {
                 const isExp = expanded === c.id;
                 return (
                   <div key={c.id} onClick={() => setExpanded(isExp ? null : c.id)} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", marginBottom: 10, cursor: "pointer", boxShadow: isExp ? "0 3px 16px rgba(92,45,14,0.06)" : "none" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                      {c.labelImage && <LabelThumbnail src={c.labelImage} size={56} />}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, marginBottom: 3 }}>
                           {c.name || "Unnamed"} {c.favorite && <span style={{ color: "var(--star)", fontSize: 13 }}>★</span>}
@@ -610,9 +727,10 @@ export default function Home() {
                         </div>
                         <Stars value={c.rating || 0} onChange={(r) => update(c.id, { rating: r })} size={14} />
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ice)" }}>{rg(c)}g</div>
-                        <div style={{ fontSize: 10, color: "var(--muted)" }}>{rp(c)} portion{rp(c) !== 1 ? "s" : ""}</div>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ice)" }}>{c.isActiveRemaining ? c.portions.slice(c.portionIndex + 1).reduce((s, p) => s + p.grams, 0) : rg(c)}g</div>
+                        <div style={{ fontSize: 10, color: "var(--muted)" }}>{c.isActiveRemaining ? c.portions.length - c.portionIndex - 1 : rp(c)} portion{(c.isActiveRemaining ? c.portions.length - c.portionIndex - 1 : rp(c)) !== 1 ? "s" : ""}</div>
+                        {c.isActiveRemaining && <div style={{ fontSize: 10, color: "var(--active)", fontWeight: 600, marginTop: 2 }}>● 1 active</div>}
                         <div style={{ fontSize: 10, color: "var(--ice)", fontWeight: 600, marginTop: 2 }}>❄ {fmt(c.addedAt)}</div>
                         <div style={{ fontSize: 9, color: "var(--muted)" }}>{daysAgo(c.addedAt)}</div>
                       </div>
@@ -621,35 +739,42 @@ export default function Home() {
                       {c.portions.map((p, i) => {
                         const used = i < c.portionIndex;
                         const isCur = i === c.portionIndex;
+                        const isActive = c.isActiveRemaining && isCur;
                         return (
-                          <div key={i} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: 600, background: used ? "#EDEAE7" : isCur ? "var(--ice-bg)" : "#F8F5F2", border: `1px solid ${used ? "#D5CEC6" : isCur ? "var(--ice)" : "var(--border)"}`, color: used ? "#A09890" : isCur ? "var(--ice)" : "var(--muted)", textDecoration: used ? "line-through" : "none" }}>
-                            {p.grams}g · {p.doses}d{p.buffer > 0 && !used ? ` +${p.buffer}` : ""}
+                          <div key={i} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: 600, background: used ? "#EDEAE7" : isActive ? "var(--active-bg)" : isCur ? "var(--ice-bg)" : "#F8F5F2", border: `1px solid ${used ? "#D5CEC6" : isActive ? "var(--active)" : isCur ? "var(--ice)" : "var(--border)"}`, color: used ? "#A09890" : isActive ? "var(--active)" : isCur ? "var(--ice)" : "var(--muted)", textDecoration: used ? "line-through" : "none" }}>
+                            {p.grams}g · {p.doses}d{p.buffer > 0 && !used ? ` +${p.buffer}` : ""}{isActive ? " ●" : ""}
                           </div>
                         );
                       })}
                     </div>
                     {isExp && (
                       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-                        {c.espresso && (c.espresso.dose || c.espresso.yield || c.espresso.time || c.espresso.grind) && (
-                          <div style={{ marginBottom: 10, padding: "8px 10px", background: "var(--accent-bg, #FDF8F4)", border: "1px solid var(--accent-light, #E8D5C4)", borderRadius: 6 }}>
-                            <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 4 }}>Espresso Recipe</div>
-                            <div style={{ display: "flex", gap: 12, fontSize: 12, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--text)" }}>
-                              {c.espresso.dose && <span>{c.espresso.dose}g in</span>}
-                              {c.espresso.yield && <span>{c.espresso.yield}g out</span>}
-                              {c.espresso.time && <span>{c.espresso.time}s</span>}
-                              {c.espresso.grind && <span>@{c.espresso.grind}</span>}
-                              {c.espresso.feedSpeed && <span>feed:{c.espresso.feedSpeed}</span>}
-                              {c.espresso.temp && <span>{c.espresso.temp}°</span>}
-                              {c.espresso.preInfuse && <span>pre:{c.espresso.preInfuse}s</span>}
+                        {c.labelImage && (
+                          <div style={{ marginBottom: 12, display: "flex", justifyContent: "center" }}>
+                            <LabelThumbnail src={c.labelImage} size={120} />
+                          </div>
+                        )}
+                        {c.espresso && (c.espresso.dose || c.espresso.yield || c.espresso.totalTime || c.espresso.time || c.espresso.grind) && (
+                          <div style={{ marginBottom: 10, padding: "10px 12px", background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)", border: "1.5px solid var(--accent-light, #E8D5C4)", borderRadius: 8, boxShadow: "0 2px 6px rgba(92,45,14,0.06)" }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 }}>☕ Espresso Recipe</div>
+                            <div style={{ display: "flex", gap: 10, fontSize: 13, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--text)", fontWeight: 500 }}>
+                              {c.espresso.dose && <span>{c.espresso.dose}g →</span>}
+                              {c.espresso.yield && <span>{c.espresso.yield}g</span>}
                             </div>
-                            {c.espresso.notes && <div style={{ marginTop: 4, fontSize: 11, fontStyle: "italic" }}>{c.espresso.notes}</div>}
+                            <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--muted)", marginTop: 4 }}>
+                              {(c.espresso.totalTime || c.espresso.time) && <span>⏱ {c.espresso.totalTime || c.espresso.time}s{c.espresso.preInfuse ? ` (pre:${c.espresso.preInfuse}s)` : ""}{c.espresso.brewTime ? ` (brew:${c.espresso.brewTime}s)` : ""}</span>}
+                              {c.espresso.grind && <span>⚙ @{c.espresso.grind}{c.espresso.feedSpeed ? ` · ${c.espresso.feedSpeed}` : ""}</span>}
+                              {c.espresso.temp && <span>🌡 {c.espresso.temp}°{c.espresso.tempUnit || "C"}</span>}
+                            </div>
+                            {c.espresso.notes && <div style={{ marginTop: 6, fontSize: 11, fontStyle: "italic", borderTop: "1px solid var(--border)", paddingTop: 6 }}>"{c.espresso.notes}"</div>}
                           </div>
                         )}
                         {[["Roaster", c.roaster], ["Producer", c.producer], ["Region", c.region], ["Roast", c.roastLevel], ["Altitude", c.altitude], ["Price", c.price]]
                           .filter(([, v]) => v).map(([l, v]) => <div key={l}><strong style={{ color: "var(--text)" }}>{l}:</strong> {v}</div>)}
                         {c.tastingNotes && <div style={{ marginTop: 4, fontStyle: "italic" }}>"{c.tastingNotes}"</div>}
                         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                          <button onClick={(e) => { e.stopPropagation(); pull(c.id); }} style={{ flex: 1, padding: "8px 0", background: "var(--ice)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>Pull a portion</button>
+                          {!c.isActiveRemaining && <button onClick={(e) => { e.stopPropagation(); pull(c.id); }} style={{ flex: 1, padding: "8px 0", background: "var(--ice)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>Pull a portion</button>}
+                          {c.isActiveRemaining && <div style={{ flex: 1, padding: "8px 0", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 7, fontSize: 12, fontWeight: 600, textAlign: "center", color: "var(--active)" }}>Finish active portion first</div>}
                           <button onClick={(e) => { e.stopPropagation(); update(c.id, { favorite: !c.favorite }); }} style={{ padding: "8px 14px", background: "none", border: `1px solid ${c.favorite ? "var(--star)" : "var(--border)"}`, color: c.favorite ? "var(--star)" : "var(--muted)", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>{c.favorite ? "★" : "☆"}</button>
                           <button onClick={(e) => { e.stopPropagation(); del(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 7, fontSize: 12 }}>✕</button>
                         </div>
@@ -659,7 +784,7 @@ export default function Home() {
                 );
               })}
             </div>
-          )}
+          );})()}
 
           {/* ─── SCAN ─── */}
           {view === "scan" && (
