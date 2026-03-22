@@ -58,10 +58,24 @@ function LabelThumbnail({ src, size = 48, expandable = true }) {
   );
 }
 
+// Country code mapping
+const COUNTRY_CODES = {
+  "colombia": "COL", "brazil": "BRA", "ethiopia": "ETH", "kenya": "KEN", "guatemala": "GUA",
+  "costa rica": "CRI", "panama": "PAN", "honduras": "HON", "el salvador": "SLV", "peru": "PER",
+  "mexico": "MEX", "nicaragua": "NIC", "rwanda": "RWA", "burundi": "BDI", "indonesia": "IDN",
+  "vietnam": "VNM", "india": "IND", "yemen": "YEM", "jamaica": "JAM", "hawaii": "HAW",
+  "ecuador": "ECU", "bolivia": "BOL", "tanzania": "TZA", "uganda": "UGA", "congo": "COD",
+  "malawi": "MWI", "zambia": "ZMB", "papua new guinea": "PNG", "china": "CHN", "thailand": "THA",
+};
+const getCountryCode = (country) => {
+  if (!country) return null;
+  const lower = country.toLowerCase();
+  return COUNTRY_CODES[lower] || country.slice(0, 3).toUpperCase();
+};
+
 // Clean digital label card using bag colors
 function LabelCard({ coffee, size = "medium" }) {
   const bgColor = coffee.bagColor || "#6B4423";
-  const textColor = coffee.textColor || "#FFFFFF";
 
   // Calculate if we need light or dark text
   const isDark = (hex) => {
@@ -75,18 +89,21 @@ function LabelCard({ coffee, size = "medium" }) {
 
   const dark = isDark(bgColor);
   const primary = coffee.textColor || (dark ? "#FFFFFF" : "#1A1A1A");
-  const secondary = dark ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0.6)";
-  const tertiary = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.45)";
+  const secondary = dark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
 
+  // Increased sizes for better readability
   const sizes = {
-    small: { width: 72, height: 72, nameSize: 11, tagSize: 6, roasterSize: 6, padding: 8 },
-    medium: { width: 90, height: 90, nameSize: 13, tagSize: 7, roasterSize: 7, padding: 10 },
-    large: { width: 130, height: 130, nameSize: 16, tagSize: 8, roasterSize: 8, padding: 14 },
+    small: { width: 88, height: 100, nameSize: 12, tagSize: 7, roasterSize: 7, padding: 10, gap: 4 },
+    medium: { width: 110, height: 120, nameSize: 14, tagSize: 8, roasterSize: 8, padding: 12, gap: 5 },
+    large: { width: 150, height: 160, nameSize: 18, tagSize: 9, roasterSize: 9, padding: 16, gap: 6 },
   };
   const s = sizes[size] || sizes.medium;
 
-  // Get up to 3 tags from country, variety, process
-  const tags = [coffee.country, coffee.variety, coffee.process].filter(Boolean).slice(0, 3);
+  // Build tags: country code, variety, process (abbreviated if needed)
+  const countryCode = getCountryCode(coffee.country);
+  const variety = coffee.variety ? (coffee.variety.length > 8 ? coffee.variety.slice(0, 7) + "." : coffee.variety) : null;
+  const process = coffee.process ? (coffee.process.length > 10 ? coffee.process.slice(0, 9) + "." : coffee.process) : null;
+  const tags = [countryCode, variety, process].filter(Boolean);
 
   return (
     <div
@@ -94,77 +111,82 @@ function LabelCard({ coffee, size = "medium" }) {
       style={{
         width: s.width,
         height: s.height,
-        background: `linear-gradient(145deg, ${bgColor} 0%, ${bgColor}dd 100%)`,
-        borderRadius: 10,
+        background: `linear-gradient(145deg, ${bgColor} 0%, ${bgColor}ee 100%)`,
+        borderRadius: 12,
         padding: s.padding,
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
-        boxShadow: "0 3px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)",
-        border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"}`,
+        boxShadow: "0 4px 14px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.12)",
+        border: `1px solid ${dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
         flexShrink: 0,
         position: "relative",
         overflow: "hidden",
       }}
     >
-      {/* Top section: Roaster */}
+      {/* Top: Roaster */}
+      {coffee.roaster && (
+        <div style={{
+          fontSize: s.roasterSize,
+          fontWeight: 600,
+          color: secondary,
+          textTransform: "uppercase",
+          letterSpacing: "0.5px",
+          lineHeight: 1.1,
+          textAlign: "center",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}>
+          {coffee.roaster.length > 14 ? coffee.roaster.slice(0, 13) + "…" : coffee.roaster}
+        </div>
+      )}
+
+      {/* Middle: Coffee name - allow full display */}
       <div style={{
-        fontSize: s.roasterSize,
-        fontWeight: 600,
-        color: secondary,
-        textTransform: "uppercase",
-        letterSpacing: "0.8px",
-        lineHeight: 1,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
+        flex: 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "4px 0",
       }}>
-        {coffee.roaster || ""}
+        <div style={{
+          fontSize: s.nameSize,
+          fontWeight: 700,
+          color: primary,
+          lineHeight: 1.2,
+          fontFamily: "'Playfair Display', Georgia, serif",
+          textAlign: "center",
+          wordBreak: "break-word",
+          hyphens: "auto",
+        }}>
+          {coffee.name || "Unnamed"}
+        </div>
       </div>
 
-      {/* Middle: Coffee name */}
-      <div style={{
-        fontSize: s.nameSize,
-        fontWeight: 700,
-        color: primary,
-        lineHeight: 1.15,
-        fontFamily: "'Playfair Display', Georgia, serif",
-        textAlign: "center",
-        wordBreak: "break-word",
-        display: "-webkit-box",
-        WebkitLineClamp: 2,
-        WebkitBoxOrient: "vertical",
-        overflow: "hidden",
-      }}>
-        {coffee.name || "Unnamed"}
-      </div>
-
-      {/* Bottom: Tags */}
+      {/* Bottom: Tags in a row */}
       <div style={{
         display: "flex",
-        flexWrap: "wrap",
-        gap: 3,
+        gap: s.gap,
         justifyContent: "center",
+        flexWrap: "nowrap",
       }}>
         {tags.map((tag, i) => (
           <span
             key={i}
             style={{
               fontSize: s.tagSize,
-              fontWeight: 500,
+              fontWeight: 600,
               color: primary,
-              background: dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.08)",
-              padding: "2px 5px",
-              borderRadius: 3,
+              background: dark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.1)",
+              padding: "3px 6px",
+              borderRadius: 4,
               textTransform: "uppercase",
-              letterSpacing: "0.3px",
+              letterSpacing: "0.2px",
               whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              maxWidth: "100%",
             }}
           >
-            {tag.length > 10 ? tag.slice(0, 9) + "…" : tag}
+            {tag}
           </span>
         ))}
       </div>
