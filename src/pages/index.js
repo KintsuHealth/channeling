@@ -303,15 +303,25 @@ function EspressoRecipe({ recipe, onChange }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
           <div>
             <label style={labelStyle}>Pre-infusion (s)</label>
-            <input value={loc.preInfuse || ""} onChange={(e) => setLoc({ ...loc, preInfuse: e.target.value })} placeholder="5" style={inputStyle} />
+            <input value={loc.preInfuse || ""} onChange={(e) => {
+              const preInfuse = e.target.value;
+              const total = (parseFloat(preInfuse) || 0) + (parseFloat(loc.brewTime) || 0);
+              setLoc({ ...loc, preInfuse, totalTime: total > 0 ? String(total) : "" });
+            }} placeholder="5" style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>Brew (s)</label>
-            <input value={loc.brewTime || ""} onChange={(e) => setLoc({ ...loc, brewTime: e.target.value })} placeholder="23" style={inputStyle} />
+            <input value={loc.brewTime || ""} onChange={(e) => {
+              const brewTime = e.target.value;
+              const total = (parseFloat(loc.preInfuse) || 0) + (parseFloat(brewTime) || 0);
+              setLoc({ ...loc, brewTime, totalTime: total > 0 ? String(total) : "" });
+            }} placeholder="23" style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>Total (s)</label>
-            <input value={loc.totalTime || ""} onChange={(e) => setLoc({ ...loc, totalTime: e.target.value })} placeholder="28" style={inputStyle} />
+            <div style={{ ...inputStyle, background: "#F5F2EF", color: "var(--accent-dark)", fontWeight: 600, display: "flex", alignItems: "center" }}>
+              {loc.totalTime || "—"}
+            </div>
           </div>
         </div>
       </div>
