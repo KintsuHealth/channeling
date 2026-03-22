@@ -431,10 +431,10 @@ const compressImage = (file, maxSizeBytes = 4 * 1024 * 1024) => {
   });
 };
 
-// Crop label from image using bounds from AI
-const cropLabel = (imageSrc, bounds, borderColor) => {
+// Perspective transform: extract and flatten a quadrilateral label from image
+const extractLabel = (imageSrc, corners, colors) => {
   return new Promise((resolve) => {
-    if (!bounds || !bounds.width || !bounds.height) {
+    if (!corners || !corners.topLeft || !corners.topRight || !corners.bottomLeft || !corners.bottomRight) {
       resolve(null);
       return;
     }
@@ -444,66 +444,99 @@ const cropLabel = (imageSrc, bounds, borderColor) => {
     img.onload = () => {
       const { width: imgW, height: imgH } = img;
 
-      // Calculate pixel coordinates from percentage bounds
-      const x = Math.round(bounds.x * imgW);
-      const y = Math.round(bounds.y * imgH);
-      const w = Math.round(bounds.width * imgW);
-      const h = Math.round(bounds.height * imgH);
-      const rotation = bounds.rotation || 0;
+      // Convert percentage coordinates to pixels
+      const src = {
+        tl: { x: corners.topLeft.x * imgW, y: corners.topLeft.y * imgH },
+        tr: { x: corners.topRight.x * imgW, y: corners.topRight.y * imgH },
+        bl: { x: corners.bottomLeft.x * imgW, y: corners.bottomLeft.y * imgH },
+        br: { x: corners.bottomRight.x * imgW, y: corners.bottomRight.y * imgH },
+      };
 
-      // Add padding for border
-      const padding = 8;
+      // Calculate output dimensions based on the longest edges
+      const topWidth = Math.sqrt(Math.pow(src.tr.x - src.tl.x, 2) + Math.pow(src.tr.y - src.tl.y, 2));
+      const bottomWidth = Math.sqrt(Math.pow(src.br.x - src.bl.x, 2) + Math.pow(src.br.y - src.bl.y, 2));
+      const leftHeight = Math.sqrt(Math.pow(src.bl.x - src.tl.x, 2) + Math.pow(src.bl.y - src.tl.y, 2));
+      const rightHeight = Math.sqrt(Math.pow(src.br.x - src.tr.x, 2) + Math.pow(src.br.y - src.tr.y, 2));
+
+      const outW = Math.round(Math.max(topWidth, bottomWidth));
+      const outH = Math.round(Math.max(leftHeight, rightHeight));
+
+      // Create output canvas with padding for border
+      const padding = 6;
       const borderWidth = 4;
-
-      // Create canvas for cropped label
       const canvas = document.createElement("canvas");
-      const outputW = w + (padding + borderWidth) * 2;
-      const outputH = h + (padding + borderWidth) * 2;
-
-      // Handle rotation
-      if (Math.abs(rotation) > 1) {
-        const rad = (rotation * Math.PI) / 180;
-        const cos = Math.abs(Math.cos(rad));
-        const sin = Math.abs(Math.sin(rad));
-        canvas.width = Math.round(w * cos + h * sin) + (padding + borderWidth) * 2;
-        canvas.height = Math.round(h * cos + w * sin) + (padding + borderWidth) * 2;
-      } else {
-        canvas.width = outputW;
-        canvas.height = outputH;
-      }
-
+      canvas.width = outW + (padding + borderWidth) * 2;
+      canvas.height = outH + (padding + borderWidth) * 2;
       const ctx = canvas.getContext("2d");
 
-      // Fill with border color
-      ctx.fillStyle = borderColor || "#FFFFFF";
+      // Fill background with border color
+      ctx.fillStyle = colors?.border || "#C41E3A";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw white inner background
-      ctx.fillStyle = "#FFFFFF";
+      // Inner background
+      ctx.fillStyle = colors?.background || "#FFFFFF";
       ctx.fillRect(borderWidth, borderWidth, canvas.width - borderWidth * 2, canvas.height - borderWidth * 2);
 
-      // Apply rotation if needed
-      ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      if (Math.abs(rotation) > 1) {
-        ctx.rotate((-rotation * Math.PI) / 180);
+      // Create a temporary canvas for the source image
+      const srcCanvas = document.createElement("canvas");
+      srcCanvas.width = imgW;
+      srcCanvas.height = imgH;
+      const srcCtx = srcCanvas.getContext("2d");
+      srcCtx.drawImage(img, 0, 0);
+      const srcData = srcCtx.getImageData(0, 0, imgW, imgH);
+
+      // Create output image data
+      const outCanvas = document.createElement("canvas");
+      outCanvas.width = outW;
+      outCanvas.height = outH;
+      const outCtx = outCanvas.getContext("2d");
+      const outData = outCtx.createImageData(outW, outH);
+
+      // Perspective transform using bilinear interpolation
+      for (let y = 0; y < outH; y++) {
+        for (let x = 0; x < outW; x++) {
+          // Normalized coordinates in output (0 to 1)
+          const u = x / (outW - 1);
+          const v = y / (outH - 1);
+
+          // Bilinear interpolation to find source position
+          const topX = src.tl.x + u * (src.tr.x - src.tl.x);
+          const topY = src.tl.y + u * (src.tr.y - src.tl.y);
+          const botX = src.bl.x + u * (src.br.x - src.bl.x);
+          const botY = src.bl.y + u * (src.br.y - src.bl.y);
+
+          const srcX = topX + v * (botX - topX);
+          const srcY = topY + v * (botY - topY);
+
+          // Sample source pixel (with bounds checking)
+          const sx = Math.round(srcX);
+          const sy = Math.round(srcY);
+          if (sx >= 0 && sx < imgW && sy >= 0 && sy < imgH) {
+            const srcIdx = (sy * imgW + sx) * 4;
+            const outIdx = (y * outW + x) * 4;
+            outData.data[outIdx] = srcData.data[srcIdx];
+            outData.data[outIdx + 1] = srcData.data[srcIdx + 1];
+            outData.data[outIdx + 2] = srcData.data[srcIdx + 2];
+            outData.data[outIdx + 3] = 255;
+          }
+        }
       }
 
-      // Draw cropped region
-      ctx.drawImage(
-        img,
-        x, y, w, h,
-        -w / 2, -h / 2, w, h
-      );
-      ctx.restore();
+      outCtx.putImageData(outData, 0, 0);
 
-      // Add subtle shadow effect
-      ctx.shadowColor = "rgba(0,0,0,0.1)";
-      ctx.shadowBlur = 4;
-      ctx.shadowOffsetY = 2;
+      // Apply image enhancement: increase contrast and sharpness
+      outCtx.filter = "contrast(1.1) saturate(1.05)";
+      outCtx.drawImage(outCanvas, 0, 0);
 
-      // Convert to data URL
-      resolve(canvas.toDataURL("image/jpeg", 0.92));
+      // Draw the transformed label onto the final canvas with border
+      ctx.drawImage(outCanvas, padding + borderWidth, padding + borderWidth);
+
+      // Add subtle shadow
+      ctx.shadowColor = "rgba(0,0,0,0.15)";
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 3;
+
+      resolve(canvas.toDataURL("image/jpeg", 0.95));
     };
     img.onerror = () => resolve(null);
     img.src = imageSrc;
@@ -771,17 +804,16 @@ export default function Home() {
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || `Server error ${resp.status}`);
 
-      // Crop the label using bounds from AI
-      if (data.labelBounds) {
+      // Extract and flatten the label using corner coordinates from AI
+      if (data.labelCorners) {
         const previewDataUrl = await new Promise((res) => {
           const r = new FileReader();
           r.onload = () => res(r.result);
           r.readAsDataURL(processedFile);
         });
-        const borderColor = data.labelDesign?.bgColor || data.labelDesign?.borderColor || "#C41E3A";
-        const cropped = await cropLabel(previewDataUrl, data.labelBounds, borderColor);
-        if (cropped) {
-          setCroppedLabel(cropped);
+        const extracted = await extractLabel(previewDataUrl, data.labelCorners, data.labelColors);
+        if (extracted) {
+          setCroppedLabel(extracted);
         }
       }
 

@@ -35,7 +35,7 @@ export default async function handler(req, res) {
             },
             {
               type: "text",
-              text: `You are a coffee bag label parser. Extract label info AND the label's position in the image for cropping.
+              text: `You are a coffee bag label parser. Extract label info AND the EXACT 4 corners of the label for perspective correction.
 
 Return ONLY a raw JSON object — no markdown, no backticks, no explanation:
 {
@@ -52,27 +52,26 @@ Return ONLY a raw JSON object — no markdown, no backticks, no explanation:
   "price": "price if visible",
   "tastingNotes": "tasting notes / cup profile / flavor descriptors",
   "rawNotes": "harvest date, certifications, or any other notable text",
-  "labelBounds": {
-    "x": 0.15,
-    "y": 0.45,
-    "width": 0.70,
-    "height": 0.40,
-    "rotation": 0
+  "labelCorners": {
+    "topLeft": { "x": 0.15, "y": 0.42 },
+    "topRight": { "x": 0.85, "y": 0.44 },
+    "bottomLeft": { "x": 0.14, "y": 0.88 },
+    "bottomRight": { "x": 0.86, "y": 0.90 }
   },
-  "labelDesign": {
-    "bgColor": "#C41E3A",
-    "borderColor": "#FFFFFF"
+  "labelColors": {
+    "background": "#FFFFFF",
+    "border": "#C41E3A",
+    "text": "#000000"
   }
 }
 
-CRITICAL for labelBounds: Identify the main information label/sticker on the coffee bag (the part with coffee name, origin, process details). Return coordinates as DECIMALS from 0 to 1 representing percentage of image dimensions:
-- x: left edge of label (0 = left side of image, 1 = right side)
-- y: top edge of label (0 = top of image, 1 = bottom)
-- width: label width as fraction of image width
-- height: label height as fraction of image height
-- rotation: degrees of rotation needed to straighten (negative = clockwise, positive = counter-clockwise)
+CRITICAL - labelCorners: Find the main coffee information sticker/label on the bag (usually contains coffee name, origin, variety, process). Identify the EXACT 4 corners of this label as decimals from 0 to 1:
+- x: horizontal position (0 = left edge of image, 1 = right edge)
+- y: vertical position (0 = top of image, 1 = bottom)
 
-Be precise with the bounds - we will crop this exact region. For labelDesign, extract the bag's main color and any border/accent color.`,
+The corners may NOT form a perfect rectangle if the label is at an angle or the bag is curved. That's expected - we will use perspective transform to flatten it.
+
+Be as PRECISE as possible with corner positions - trace along the actual edge of the label sticker. For labelColors, extract the label's background color, any border color, and primary text color.`,
             },
           ],
         },
