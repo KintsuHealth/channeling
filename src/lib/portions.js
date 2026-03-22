@@ -3,7 +3,10 @@ const PDMIN = 5; // min doses per portion
 const PDMAX = 7; // max doses per portion
 
 export function optimizePortions(totalGrams, doseG = DEFAULT_DOSE_G) {
+  // Ensure valid inputs
   if (!totalGrams || totalGrams <= 0) return { portions: [], summary: "No weight", doseG };
+  if (!doseG || doseG < 10 || doseG > 30) doseG = DEFAULT_DOSE_G; // Sanity check dose size
+  if (totalGrams > 5000) totalGrams = 5000; // Cap at 5kg to prevent runaway loops
   const totalDoses = Math.floor(totalGrams / doseG);
   const remainderG = totalGrams - totalDoses * doseG;
 

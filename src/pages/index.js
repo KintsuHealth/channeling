@@ -1,7 +1,20 @@
 import { useState, useRef, useCallback, useMemo } from "react";
 import Head from "next/head";
-import { useLocalStorage } from "@/lib/useLocalStorage";
+import { useCoffees } from "@/lib/useCoffees";
+import { useSettings } from "@/lib/useSettings";
+import { useAuth } from "@/lib/useAuth";
+import { DataMigration } from "@/components/DataMigration";
 import { optimizePortions, parseGrams, DEFAULT_DOSE_G } from "@/lib/portions";
+import { useStats } from "@/lib/useStats";
+import Overview from "@/components/Overview";
+import {
+  calculateGrindOffset,
+  formatOffset,
+  calculateSuggestedGrind,
+  findPreviousGrindSettings,
+  validatePrediction,
+  parseAltitude
+} from "@/lib/grindPredictor";
 
 const fmt = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
 const fmtFull = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "");
@@ -265,7 +278,86 @@ function DoseTracker({ portion, dosesUsed, onChange, doseG = DEFAULT_DOSE_G }) {
   );
 }
 
-function EspressoRecipe({ recipe, onChange }) {
+function AltitudeSelector({ value, onChange }) {
+  const options = [
+    { key: "high", label: "High", desc: "1800m+" },
+    { key: "mid", label: "Mid", desc: "1400-1800m" },
+    { key: "low", label: "Low", desc: "<1400m" },
+    { key: null, label: "Unknown", desc: "" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 4 }}>
+      {options.map((o) => (
+        <button key={o.key || "null"} type="button" onClick={() => onChange(o.key)} style={{
+          flex: 1, padding: "6px 4px", border: `1.5px solid ${value === o.key ? "var(--accent)" : "var(--border)"}`,
+          borderRadius: 6, background: value === o.key ? "var(--accent-light)" : "#fff",
+          color: value === o.key ? "var(--accent-dark)" : "var(--muted)", fontSize: 10, fontWeight: 600,
+          cursor: "pointer", transition: "all 0.15s", textAlign: "center",
+        }}>
+          <div>{o.label}</div>
+          {o.desc && <div style={{ fontSize: 8, opacity: 0.7, marginTop: 1 }}>{o.desc}</div>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function GrindPredictionCard({ coffee, baseline, allCoffees, compact = false }) {
+  const prediction = useMemo(() => calculateGrindOffset(coffee, coffee?.pulledAt), [coffee]);
+  const suggested = baseline !== null ? calculateSuggestedGrind(baseline, prediction.offset) : null;
+  const previous = useMemo(() => findPreviousGrindSettings(coffee, allCoffees || []), [coffee, allCoffees]);
+
+  if (!prediction || prediction.rationale.length === 0) return null;
+
+  const confColors = { high: "var(--success)", medium: "var(--active)", low: "var(--muted)" };
+
+  return (
+    <div style={{ padding: compact ? "10px 12px" : "12px 14px", background: "#F8F5F2", borderRadius: 8, border: "1px solid var(--border)", marginTop: compact ? 8 : 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)" }}>Grind Prediction</div>
+        <div style={{ fontSize: 9, fontWeight: 600, color: confColors[prediction.confidence], textTransform: "uppercase" }}>{prediction.confidence} conf</div>
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>{formatOffset(prediction.offset)}</div>
+      {suggested !== null && (
+        <div style={{ fontSize: 13, color: "var(--accent-dark)", fontWeight: 600, marginBottom: 6 }}>
+          Suggested starting grind: <span style={{ fontFamily: "'DM Mono', monospace" }}>{suggested}</span>
+        </div>
+      )}
+      {previous && (
+        <div style={{ fontSize: 11, color: "var(--ice)", fontWeight: 500, marginBottom: 6 }}>
+          You dialed this in at <span style={{ fontWeight: 700 }}>{previous.grind}</span> last time
+        </div>
+      )}
+      {!compact && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+          {prediction.rationale.map((r, i) => (
+            <span key={i} style={{ fontSize: 9, padding: "3px 7px", background: "#EDE8E2", borderRadius: 4, color: "var(--muted)" }}>{r}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PredictionValidationBadge({ predicted, actual }) {
+  const validation = validatePrediction(predicted, actual);
+  if (!validation) return null;
+
+  const colors = {
+    close: { bg: "#E8F5E9", border: "var(--success)", text: "var(--success)" },
+    off: { bg: "#FFF8E1", border: "var(--active)", text: "var(--active)" },
+    way_off: { bg: "#FBE9E7", border: "var(--error)", text: "var(--error)" },
+  };
+  const c = colors[validation.status];
+
+  return (
+    <div style={{ padding: "6px 10px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 6, fontSize: 11, color: c.text, fontWeight: 500, marginTop: 8 }}>
+      {validation.status === "close" && "✓ "}{validation.message}
+    </div>
+  );
+}
+
+function EspressoRecipe({ recipe, onChange, coffee, baseline, allCoffees }) {
   const [editing, setEditing] = useState(false);
   const [tempUnit, setTempUnit] = useState("C");
   const [loc, setLoc] = useState(recipe || { dose: "", yield: "", preInfuse: "", brewTime: "", totalTime: "", grind: "", feedSpeed: "", temp: "", notes: "" });
@@ -277,13 +369,27 @@ function EspressoRecipe({ recipe, onChange }) {
   const sectionStyle = { marginBottom: 10, padding: "8px", background: "#fff", borderRadius: 6, border: "1px solid var(--border)" };
   const sectionTitleStyle = { fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 };
 
+  // Calculate predicted grind
+  const prediction = useMemo(() => coffee ? calculateGrindOffset(coffee, coffee.pulledAt) : null, [coffee]);
+  const suggestedGrind = baseline !== null && prediction ? calculateSuggestedGrind(baseline, prediction.offset) : null;
+
   if (!editing && !has) return (
-    <button onClick={(e) => { e.stopPropagation(); setEditing(true); }} style={{ marginTop: 8, padding: "6px 12px", background: "none", border: "1px dashed var(--border)", borderRadius: 6, fontSize: 11, color: "var(--muted)", width: "100%", textAlign: "left" }}>+ Espresso recipe</button>
+    <div>
+      {coffee && prediction?.rationale?.length > 0 && (
+        <GrindPredictionCard coffee={coffee} baseline={baseline} allCoffees={allCoffees} compact />
+      )}
+      <button onClick={(e) => { e.stopPropagation(); setEditing(true); }} style={{ marginTop: 8, padding: "6px 12px", background: "none", border: "1px dashed var(--border)", borderRadius: 6, fontSize: 11, color: "var(--muted)", width: "100%", textAlign: "left" }}>+ Espresso recipe</button>
+    </div>
   );
 
   if (editing) return (
     <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10, padding: 12, background: "#FAF7F4", borderRadius: 8, border: "1px solid var(--border)" }}>
       <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 10 }}>Espresso Recipe</div>
+      {coffee && prediction?.rationale?.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <GrindPredictionCard coffee={coffee} baseline={baseline} allCoffees={allCoffees} compact />
+        </div>
+      )}
 
       {/* Dose & Yield */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
@@ -299,7 +405,7 @@ function EspressoRecipe({ recipe, onChange }) {
 
       {/* Time Section */}
       <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>⏱ Time</div>
+        <div style={sectionTitleStyle}>Time</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
           <div>
             <label style={labelStyle}>Pre-infusion (s)</label>
@@ -328,7 +434,7 @@ function EspressoRecipe({ recipe, onChange }) {
 
       {/* Grinder Section */}
       <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>⚙ Grinder</div>
+        <div style={sectionTitleStyle}>Grinder</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
           <div>
             <label style={labelStyle}>Grind Setting</label>
@@ -349,7 +455,7 @@ function EspressoRecipe({ recipe, onChange }) {
 
       {/* Temperature Section */}
       <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>🌡 Temperature</div>
+        <div style={sectionTitleStyle}>Temp</div>
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
           <div style={{ flex: 1 }}>
             <label style={labelStyle}>Temp</label>
@@ -376,15 +482,15 @@ function EspressoRecipe({ recipe, onChange }) {
   // Display existing recipe - make it prominent
   return (
     <div onClick={(e) => { e.stopPropagation(); setEditing(true); }} style={{ marginTop: 10, padding: 12, background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)", borderRadius: 8, border: "2px solid var(--accent-light, #E8D5C4)", cursor: "pointer", boxShadow: "0 2px 8px rgba(92,45,14,0.08)" }}>
-      <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 }}>☕ Saved Recipe — tap to edit</div>
+      <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 }}>● Saved Recipe — tap to edit</div>
       <div style={{ display: "flex", gap: 10, fontSize: 13, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--text)", fontWeight: 500 }}>
         {recipe.dose && <span>{recipe.dose}g →</span>}
         {recipe.yield && <span>{recipe.yield}g</span>}
       </div>
       <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--muted)", marginTop: 4 }}>
-        {recipe.totalTime && <span>⏱ {recipe.totalTime}s{recipe.preInfuse ? ` (pre:${recipe.preInfuse}s)` : ""}{recipe.brewTime ? ` (brew:${recipe.brewTime}s)` : ""}</span>}
-        {recipe.grind && <span>⚙ @{recipe.grind}{recipe.feedSpeed ? ` · ${recipe.feedSpeed}` : ""}</span>}
-        {recipe.temp && <span>🌡 {recipe.temp}°{recipe.tempUnit || "C"}</span>}
+        {recipe.totalTime && <span>{recipe.totalTime}s{recipe.preInfuse ? ` (pre:${recipe.preInfuse}s)` : ""}{recipe.brewTime ? ` (brew:${recipe.brewTime}s)` : ""}</span>}
+        {recipe.grind && <span>@{recipe.grind}{recipe.feedSpeed ? ` · ${recipe.feedSpeed}` : ""}</span>}
+        {recipe.temp && <span>{recipe.temp}°{recipe.tempUnit || "C"}</span>}
       </div>
       {recipe.notes && <div style={{ marginTop: 6, fontSize: 11, color: "var(--muted)", fontStyle: "italic", borderTop: "1px solid var(--border)", paddingTop: 6 }}>"{recipe.notes}"</div>}
     </div>
@@ -429,12 +535,26 @@ const compressImage = (file, maxSizeBytes = 4 * 1024 * 1024) => {
 };
 
 
-const EMPTY = { name: "", country: "", region: "", variety: "", producer: "", roaster: "", roastLevel: "", process: "", altitude: "", weight: "", price: "", tastingNotes: "", roastDate: "" };
+const EMPTY = { name: "", country: "", region: "", variety: "", producer: "", roaster: "", roastLevel: "", process: "", altitude: "", altitudeCategory: null, weight: "", price: "", tastingNotes: "", roastDate: "" };
+
+const FREEZER_SORT_OPTIONS = [
+  { key: "longest", label: "Longest" },
+  { key: "newest", label: "Newest" },
+  { key: "oldest-roast", label: "Oldest roast" },
+  { key: "freshest-roast", label: "Freshest" },
+  { key: "almost-done", label: "Almost done" },
+  { key: "most-remaining", label: "Most left" },
+];
 
 const COMMON_WEIGHTS = ["250", "300", "340", "500", "1000"];
 
-function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG }) {
-  const [f, setF] = useState({ ...EMPTY, ...data });
+function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, baseline, allCoffees }) {
+  // Auto-derive altitudeCategory from altitude text if not already set
+  const initialData = { ...EMPTY, ...data };
+  if (!initialData.altitudeCategory && initialData.altitude) {
+    initialData.altitudeCategory = parseAltitude(initialData.altitude);
+  }
+  const [f, setF] = useState(initialData);
   const [manualWeight, setManualWeight] = useState(false);
   const set = (k, v) => {
     const updated = { ...f, [k]: v };
@@ -524,6 +644,11 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG })
           )}
         </div>
       </div>
+      {/* Altitude selector */}
+      <div style={{ marginTop: 12 }}>
+        <label style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 4 }}>Altitude Category</label>
+        <AltitudeSelector value={f.altitudeCategory} onChange={(v) => set("altitudeCategory", v)} />
+      </div>
       {/* Dose setting */}
       <div style={{ marginTop: 12, padding: "10px 12px", background: "#FAF7F4", borderRadius: 6, border: "1px solid var(--border)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -541,6 +666,8 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG })
           </div>
         </div>
       </div>
+      {/* Grind Prediction */}
+      <GrindPredictionCard coffee={f} baseline={baseline} allCoffees={allCoffees} />
       {grams > 0 && <PortionPlanPreview plan={plan} />}
       {f.roastDate && (() => {
         const roast = new Date(f.roastDate);
@@ -598,20 +725,29 @@ function ManualEntry({ onSubmit, onCancel }) {
 
 // ─── Main ───
 export default function Home() {
-  const [coffees, setCoffees, loaded] = useLocalStorage("coffee-inv", []);
-  const [doseG, setDoseG] = useLocalStorage("coffee-dose", DEFAULT_DOSE_G);
+  const { user, signOut } = useAuth();
+  const { coffees, loading: coffeesLoading, addCoffee: addCoffeeToDb, updateCoffee: updateCoffeeInDb, deleteCoffee: deleteCoffeeFromDb, uploadLabelImage } = useCoffees();
+  const { baselineGrind, baselineGrindInput, setBaselineGrind, doseG, setDoseG, loading: settingsLoading } = useSettings();
+  const loaded = !coffeesLoading && !settingsLoading;
+  const [showSettings, setShowSettings] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
   const [parsed, setParsed] = useState(null);
   const [manualMode, setManualMode] = useState(false);
   const [pendingRating, setPendingRating] = useState(0);
-  const [view, setView] = useState("morning");
+  const [view, setView] = useState("overview");
   const [expanded, setExpanded] = useState(null);
+  const [freezerSort, setFreezerSort] = useState("longest");
   const fileRef = useRef(null);
 
-  const update = (id, patch) => setCoffees((p) => p.map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  const del = (id) => setCoffees((p) => p.filter((c) => c.id !== id));
+  const update = (id, patch) => updateCoffeeInDb(id, patch);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const del = (id) => {
+    if (window.confirm("Are you sure you want to delete this coffee? This cannot be undone.")) {
+      deleteCoffeeFromDb(id);
+    }
+  };
 
   const activeCoffees = useMemo(() => coffees.filter((c) => c.status === "active").sort((a, b) => new Date(a.pulledAt) - new Date(b.pulledAt)), [coffees]);
   const frozen = useMemo(() => coffees.filter((c) => c.status === "frozen").sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)), [coffees]);
@@ -629,13 +765,15 @@ export default function Home() {
     total += activeCoffees.reduce((s, c) => s + c.portions.slice(c.portionIndex + 1).reduce((ss, p) => ss + p.doses, 0), 0);
     return total;
   }, [frozen, activeCoffees]);
+  const totalFrozenPortions = useMemo(() => {
+    let total = frozen.reduce((s, c) => s + (c.portions.length - c.portionIndex), 0);
+    total += activeCoffees.reduce((s, c) => s + Math.max(0, c.portions.length - c.portionIndex - 1), 0);
+    return total;
+  }, [frozen, activeCoffees]);
   const [showAllActive, setShowAllActive] = useState(false);
 
-  const pull = (id) => {
-    setCoffees((p) => p.map((c) => {
-      if (c.id === id) return { ...c, status: "active", dosesUsed: 0, pulledAt: new Date().toISOString() };
-      return c;
-    }));
+  const pull = async (id) => {
+    await update(id, { status: "active", dosesUsed: 0, pulledAt: new Date().toISOString() });
     setView("morning");
   };
 
@@ -696,17 +834,47 @@ export default function Home() {
     }
   }, []);
 
-  const addCoffee = (data, rating) => {
+  const addCoffee = async (data, rating) => {
     const grams = parseGrams(data.weight);
-    const plan = optimizePortions(grams, doseG);
-    setCoffees((prev) => [{
-      ...data, id: Date.now().toString(), addedAt: new Date().toISOString(),
-      frozenAt: new Date().toISOString(), rating: rating || 0,
-      gramsTotal: grams, portions: plan.portions, portionIndex: 0, dosesUsed: 0,
-      status: "frozen", espresso: null, favorite: false, doseG,
-      labelImage: preview,
-    }, ...prev]);
-    setParsed(null); setPreview(null); setPendingRating(0); setManualMode(false); setError(null); setView("freezer");
+    const plan = optimizePortions(grams, doseG || DEFAULT_DOSE_G);
+    const prediction = calculateGrindOffset(data);
+
+    // Upload label image to storage if present
+    let labelImage = preview;
+    if (preview && preview.startsWith('data:')) {
+      const uploadedUrl = await uploadLabelImage(preview);
+      if (uploadedUrl) labelImage = uploadedUrl;
+    }
+
+    const coffeeData = {
+      ...data,
+      rating: rating || 0,
+      gramsTotal: grams,
+      portions: plan.portions,
+      portionIndex: 0,
+      dosesUsed: 0,
+      status: "frozen",
+      espresso: null,
+      favorite: false,
+      doseG: doseG || DEFAULT_DOSE_G,
+      labelImage,
+      grindOffsetPrediction: prediction.offset,
+      grindOffsetRationale: prediction.rationale,
+      grindConfidence: prediction.confidence,
+    };
+
+    try {
+      const result = await addCoffeeToDb(coffeeData);
+      if (!result) {
+        setError("Failed to save coffee. Check console for details.");
+        console.error("addCoffeeToDb returned null - check Supabase error");
+        return;
+      }
+      setParsed(null); setPreview(null); setPendingRating(0); setManualMode(false); setError(null); setView("freezer");
+    } catch (err) {
+      setError(`Failed to save: ${err.message}`);
+      console.error("Error adding coffee:", err);
+    }
   };
 
   const resetScan = () => { setParsed(null); setPreview(null); setManualMode(false); setError(null); };
@@ -715,11 +883,14 @@ export default function Home() {
   const rg = (c) => c.portions.slice(c.portionIndex).reduce((s, p) => s + p.grams, 0);
   const curP = (c) => c.portions[c.portionIndex];
 
+  const stats = useStats(coffees);
+
   const nav = [
-    { key: "morning", icon: "☀", label: "Now" },
+    { key: "overview", icon: "◐", label: "Home" },
+    { key: "morning", icon: "☀", label: "Active" },
     { key: "freezer", icon: "❄", label: "Freezer" },
-    { key: "scan", icon: "📷", label: "Scan" },
-    { key: "archive", icon: "📋", label: "Archive" },
+    { key: "scan", icon: "◎", label: "Scan" },
+    { key: "archive", icon: "≡", label: "Archive" },
   ];
 
   if (!loaded) return null;
@@ -727,7 +898,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Coffee Inventory</title>
+        <title>Channeling</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#F5F0EB" />
@@ -739,18 +910,60 @@ export default function Home() {
       <div style={{ minHeight: "100vh", paddingBottom: 80 }}>
         {/* Header */}
         <div style={{ padding: "24px 20px 14px", background: "var(--card)", borderBottom: "1px solid var(--border)" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 22 }}>☕</span>
-            <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, margin: 0, color: "var(--accent-dark)" }}>Coffee Inventory</h1>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <span style={{ fontSize: 18 }}>●</span>
+              <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, margin: 0, color: "var(--accent-dark)" }}>Channeling</h1>
+            </div>
+            <button onClick={() => setShowSettings(!showSettings)} style={{ background: "none", border: "none", fontSize: 18, color: showSettings ? "var(--accent)" : "var(--muted)", cursor: "pointer", padding: 4 }}>○</button>
           </div>
           <div style={{ marginTop: 5, fontSize: 11, color: "var(--muted)" }}>
             {totalFrozenGrams > 0 ? `${totalFrozenGrams}g · ${totalFrozenDoses} doses across ${frozen.length} bag${frozen.length !== 1 ? "s" : ""} in freezer` : activeCoffees.length > 0 ? "Freezer empty — active bag only" : "No coffee tracked yet"}
           </div>
+          {showSettings && (
+            <div style={{ marginTop: 12, padding: "12px 14px", background: "#FAF7F4", borderRadius: 8, border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 8 }}>Grind Settings</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <label style={{ fontSize: 12, color: "var(--text)", flex: 1 }}>Baseline Grind Setting</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={baselineGrindInput}
+                  onChange={(e) => setBaselineGrind(e.target.value)}
+                  placeholder="e.g. 4.5"
+                  style={{ width: 80, padding: "6px 8px", border: "1px solid var(--border)", borderRadius: 5, fontSize: 12, fontFamily: "'DM Mono', monospace", textAlign: "center" }}
+                />
+              </div>
+              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>Your typical setting for a medium-roast washed coffee</div>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 8 }}>Account</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>{user?.email}</span>
+                  <button onClick={signOut} style={{ padding: "5px 10px", background: "none", border: "1px solid var(--border)", borderRadius: 5, fontSize: 11, color: "var(--muted)", cursor: "pointer" }}>Sign Out</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ maxWidth: 540, margin: "0 auto", padding: "16px 16px 0" }}>
+          <DataMigration />
 
-          {/* ─── MORNING ─── */}
+          {/* ─── OVERVIEW ─── */}
+          {view === "overview" && (
+            <Overview
+              stats={stats}
+              onUseDose={() => {
+                const active = activeCoffees[0];
+                if (active && active.dosesUsed < active.portions[active.portionIndex]?.doses) {
+                  update(active.id, { dosesUsed: active.dosesUsed + 1 });
+                }
+              }}
+              onPullFromFreezer={() => setView("freezer")}
+            />
+          )}
+
+          {/* ─── ACTIVE ─── */}
           {view === "morning" && (
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--active)", marginBottom: 10 }}>● Active{activeCoffees.length > 1 ? ` (${activeCoffees.length})` : ""}</div>
@@ -787,7 +1000,7 @@ export default function Home() {
                           </div>
                         </div>
                         {cur && <DoseTracker portion={cur} dosesUsed={active.dosesUsed} onChange={(d) => update(active.id, { dosesUsed: d })} doseG={active.doseG || DEFAULT_DOSE_G} />}
-                        <EspressoRecipe recipe={active.espresso} onChange={(esp) => update(active.id, { espresso: esp })} />
+                        <EspressoRecipe recipe={active.espresso} onChange={(esp) => update(active.id, { espresso: esp })} coffee={active} baseline={baselineGrind} allCoffees={coffees} />
                         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                           <button onClick={(e) => { e.stopPropagation(); finishPortion(active); }} style={{ flex: 1, padding: "9px 0", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>
                             {more > 0 ? "Portion done → freezer" : "Bag finished"}
@@ -839,10 +1052,10 @@ export default function Home() {
                           <span style={{ fontSize: 9, fontWeight: 600, color: "var(--accent)", marginRight: 6 }}>RECIPE:</span>
                           {c.espresso.dose && <span>{c.espresso.dose}g → </span>}
                           {c.espresso.yield && <span>{c.espresso.yield}g </span>}
-                          {(c.espresso.totalTime || c.espresso.time) && <span>⏱{c.espresso.totalTime || c.espresso.time}s </span>}
-                          {c.espresso.grind && <span>⚙@{c.espresso.grind} </span>}
+                          {(c.espresso.totalTime || c.espresso.time) && <span>{c.espresso.totalTime || c.espresso.time}s </span>}
+                          {c.espresso.grind && <span>@{c.espresso.grind} </span>}
                           {c.espresso.feedSpeed && <span>{c.espresso.feedSpeed} </span>}
-                          {c.espresso.temp && <span>🌡{c.espresso.temp}°{c.espresso.tempUnit || ""}</span>}
+                          {c.espresso.temp && <span>{c.espresso.temp}°{c.espresso.tempUnit || ""}</span>}
                         </div>
                       )}
                     </div>
@@ -858,12 +1071,59 @@ export default function Home() {
             // Include remaining portions from active coffees
             const activeWithRemaining = activeCoffees.filter(c => c.portionIndex + 1 < c.portions.length);
             const allFreezerItems = [...frozen, ...activeWithRemaining.map(c => ({ ...c, isActiveRemaining: true }))];
+
+            // Sort freezer items based on selected sort option
+            const getRemainingPortions = (c) => c.isActiveRemaining
+              ? c.portions.length - c.portionIndex - 1
+              : c.portions.length - c.portionIndex;
+
+            const sortedFreezerItems = [...allFreezerItems].sort((a, b) => {
+              switch (freezerSort) {
+                case "newest":
+                  return new Date(b.addedAt) - new Date(a.addedAt);
+                case "oldest-roast":
+                  return new Date(a.roastDate || 0) - new Date(b.roastDate || 0);
+                case "freshest-roast":
+                  return new Date(b.roastDate || 0) - new Date(a.roastDate || 0);
+                case "almost-done":
+                  return getRemainingPortions(a) - getRemainingPortions(b);
+                case "most-remaining":
+                  return getRemainingPortions(b) - getRemainingPortions(a);
+                default: // "longest"
+                  return new Date(a.addedAt) - new Date(b.addedAt);
+              }
+            });
+
             return (
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--ice)", marginBottom: 12 }}>❄ Freezer — {totalFrozenGrams}g · {totalFrozenDoses} doses</div>
-              {allFreezerItems.length === 0 ? (
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--ice)", marginBottom: 8 }}>❄ Freezer — {totalFrozenPortions} portion{totalFrozenPortions !== 1 ? "s" : ""} · {totalFrozenGrams}g · {totalFrozenDoses} doses</div>
+              {allFreezerItems.length > 0 && (
+                <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, marginBottom: 6, WebkitOverflowScrolling: "touch" }}>
+                  {FREEZER_SORT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setFreezerSort(freezerSort === opt.key ? "longest" : opt.key)}
+                      style={{
+                        padding: "5px 10px",
+                        background: freezerSort === opt.key ? "var(--ice)" : "var(--card)",
+                        color: freezerSort === opt.key ? "#fff" : "var(--muted)",
+                        border: `1px solid ${freezerSort === opt.key ? "var(--ice)" : "var(--border)"}`,
+                        borderRadius: 16,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {sortedFreezerItems.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", fontSize: 13 }}>Freezer empty.<br /><button onClick={() => setView("scan")} style={{ marginTop: 12, padding: "8px 20px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>Scan a bag</button></div>
-              ) : allFreezerItems.map((c) => {
+              ) : sortedFreezerItems.map((c) => {
                 const isExp = expanded === c.id;
                 return (
                   <div key={c.id} onClick={() => setExpanded(isExp ? null : c.id)} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", marginBottom: 10, cursor: "pointer", boxShadow: isExp ? "0 3px 16px rgba(92,45,14,0.06)" : "none" }}>
@@ -879,6 +1139,7 @@ export default function Home() {
                           {c.process && <Badge bg="#E5DDD4">{c.process}</Badge>}
                         </div>
                         <Stars value={c.rating || 0} onChange={(r) => update(c.id, { rating: r })} size={14} />
+                        {c.tastingNotes && <div style={{ fontSize: 10, color: "var(--muted)", fontStyle: "italic", marginTop: 4, lineHeight: 1.3 }}>"{c.tastingNotes}"</div>}
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
                         <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ice)" }}>{c.isActiveRemaining ? c.portions.slice(c.portionIndex + 1).reduce((s, p) => s + p.grams, 0) : rg(c)}g</div>
@@ -910,15 +1171,15 @@ export default function Home() {
                         )}
                         {c.espresso && (c.espresso.dose || c.espresso.yield || c.espresso.totalTime || c.espresso.time || c.espresso.grind) && (
                           <div style={{ marginBottom: 10, padding: "10px 12px", background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)", border: "1.5px solid var(--accent-light, #E8D5C4)", borderRadius: 8, boxShadow: "0 2px 6px rgba(92,45,14,0.06)" }}>
-                            <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 }}>☕ Espresso Recipe</div>
+                            <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 }}>● Espresso Recipe</div>
                             <div style={{ display: "flex", gap: 10, fontSize: 13, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--text)", fontWeight: 500 }}>
                               {c.espresso.dose && <span>{c.espresso.dose}g →</span>}
                               {c.espresso.yield && <span>{c.espresso.yield}g</span>}
                             </div>
                             <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--muted)", marginTop: 4 }}>
-                              {(c.espresso.totalTime || c.espresso.time) && <span>⏱ {c.espresso.totalTime || c.espresso.time}s{c.espresso.preInfuse ? ` (pre:${c.espresso.preInfuse}s)` : ""}{c.espresso.brewTime ? ` (brew:${c.espresso.brewTime}s)` : ""}</span>}
-                              {c.espresso.grind && <span>⚙ @{c.espresso.grind}{c.espresso.feedSpeed ? ` · ${c.espresso.feedSpeed}` : ""}</span>}
-                              {c.espresso.temp && <span>🌡 {c.espresso.temp}°{c.espresso.tempUnit || "C"}</span>}
+                              {(c.espresso.totalTime || c.espresso.time) && <span>{c.espresso.totalTime || c.espresso.time}s{c.espresso.preInfuse ? ` (pre:${c.espresso.preInfuse}s)` : ""}{c.espresso.brewTime ? ` (brew:${c.espresso.brewTime}s)` : ""}</span>}
+                              {c.espresso.grind && <span>@{c.espresso.grind}{c.espresso.feedSpeed ? ` · ${c.espresso.feedSpeed}` : ""}</span>}
+                              {c.espresso.temp && <span>{c.espresso.temp}°{c.espresso.tempUnit || "C"}</span>}
                             </div>
                             {c.espresso.notes && <div style={{ marginTop: 6, fontSize: 11, fontStyle: "italic", borderTop: "1px solid var(--border)", paddingTop: 6 }}>"{c.espresso.notes}"</div>}
                           </div>
@@ -961,7 +1222,7 @@ export default function Home() {
 
                 {!preview && !parsed && !manualMode && !scanning && (
                   <>
-                    <div style={{ fontSize: 32, marginBottom: 6, opacity: 0.7 }}>📷</div>
+                    <div style={{ fontSize: 32, marginBottom: 6, opacity: 0.7 }}>◎</div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "var(--accent)", marginBottom: 3 }}>Snap or drop a coffee bag</div>
                     <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 12 }}>Auto-parsed → optimally portioned → frozen</div>
                     <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
@@ -972,7 +1233,7 @@ export default function Home() {
 
                 {manualMode && !parsed && <ManualEntry onSubmit={(d) => { setParsed(d); setManualMode(false); }} onCancel={resetScan} />}
 
-                {parsed && <EditableResult data={parsed} onChange={setParsed} onSubmit={(data) => addCoffee(data, 0)} onCancel={resetScan} doseG={doseG} setDoseG={setDoseG} />}
+                {parsed && <EditableResult data={parsed} onChange={setParsed} onSubmit={(data) => addCoffee(data, 0)} onCancel={resetScan} doseG={doseG} setDoseG={setDoseG} baseline={baselineGrind} allCoffees={coffees} />}
               </div>
               {error && <div style={{ padding: "10px 14px", background: "#FDF0E8", border: "1px solid var(--error)", borderRadius: 7, fontSize: 12, color: "var(--error)", marginBottom: 12, lineHeight: 1.5 }}>{error}</div>}
             </div>
