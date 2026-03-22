@@ -819,6 +819,11 @@ export default function Home() {
     total += activeCoffees.reduce((s, c) => s + Math.max(0, c.portions.length - c.portionIndex - 1), 0);
     return total;
   }, [frozen, activeCoffees]);
+  const totalFreezerBags = useMemo(() => {
+    // Count frozen bags + active bags that have remaining portions in freezer
+    const activeWithRemaining = activeCoffees.filter(c => c.portionIndex + 1 < c.portions.length);
+    return frozen.length + activeWithRemaining.length;
+  }, [frozen, activeCoffees]);
   const [showAllActive, setShowAllActive] = useState(false);
 
   const pull = async (id) => {
@@ -986,7 +991,7 @@ export default function Home() {
             <button onClick={() => setShowSettings(!showSettings)} style={{ background: "none", border: "none", fontSize: 18, color: showSettings ? "var(--accent)" : "var(--muted)", cursor: "pointer", padding: 4 }}>○</button>
           </div>
           <div style={{ marginTop: 5, fontSize: 11, color: "var(--muted)" }}>
-            {totalFrozenGrams > 0 ? `${totalFrozenGrams}g · ${totalFrozenDoses} doses across ${frozen.length} bag${frozen.length !== 1 ? "s" : ""} in freezer` : activeCoffees.length > 0 ? "Freezer empty — active bag only" : "No coffee tracked yet"}
+            {totalFrozenGrams > 0 ? `${totalFrozenGrams}g · ${totalFrozenDoses} doses across ${totalFreezerBags} bag${totalFreezerBags !== 1 ? "s" : ""} in freezer` : activeCoffees.length > 0 ? "Freezer empty — active bag only" : "No coffee tracked yet"}
           </div>
           {showSettings && (
             <div style={{ marginTop: 12, padding: "12px 14px", background: "#FAF7F4", borderRadius: 8, border: "1px solid var(--border)" }}>
