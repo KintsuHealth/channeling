@@ -591,7 +591,7 @@ export default function Home() {
             <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, margin: 0, color: "var(--accent-dark)" }}>Coffee Inventory</h1>
           </div>
           <div style={{ marginTop: 5, fontSize: 11, color: "var(--muted)" }}>
-            {totalFrozenGrams > 0 ? `${totalFrozenGrams}g · ${totalFrozenDoses} doses across ${frozen.length} bag${frozen.length !== 1 ? "s" : ""} in freezer` : active ? "Freezer empty — active bag only" : "No coffee tracked yet"}
+            {totalFrozenGrams > 0 ? `${totalFrozenGrams}g · ${totalFrozenDoses} doses across ${frozen.length} bag${frozen.length !== 1 ? "s" : ""} in freezer` : activeCoffees.length > 0 ? "Freezer empty — active bag only" : "No coffee tracked yet"}
           </div>
         </div>
 
