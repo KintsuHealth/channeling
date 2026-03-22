@@ -226,11 +226,13 @@ function Stars({ value, onChange, size = 16 }) {
   );
 }
 
-function PortionPlanPreview({ plan }) {
+function PortionPlanPreview({ plan, wholeBag }) {
   if (!plan?.portions?.length) return null;
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--ice)", marginBottom: 8 }}>Portion Plan</div>
+      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--ice)", marginBottom: 8 }}>
+        {wholeBag ? "Whole Bag" : "Portion Plan"}
+      </div>
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
         {plan.portions.map((p, i) => (
           <div key={i} style={{ padding: "8px 10px", background: "var(--ice-bg)", border: "1px solid var(--ice)", borderRadius: 8, textAlign: "center", minWidth: 68 }}>
@@ -242,7 +244,7 @@ function PortionPlanPreview({ plan }) {
           </div>
         ))}
       </div>
-      <div style={{ fontSize: 11, color: "var(--success)", fontWeight: 500 }}>{plan.summary}</div>
+      {plan.summary && <div style={{ fontSize: 11, color: "var(--success)", fontWeight: 500 }}>{plan.summary}</div>}
     </div>
   );
 }
@@ -556,13 +558,16 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
   }
   const [f, setF] = useState(initialData);
   const [manualWeight, setManualWeight] = useState(false);
+  const [wholeBag, setWholeBag] = useState(false);
   const set = (k, v) => {
     const updated = { ...f, [k]: v };
     setF(updated);
     onChange(updated);
   };
   const grams = parseGrams(f.weight);
-  const plan = optimizePortions(grams, doseG);
+  const plan = wholeBag
+    ? { portions: [{ grams, doses: Math.floor(grams / doseG), buffer: grams % doseG }], summary: `1 whole bag · ${Math.floor(grams / doseG)} doses` }
+    : optimizePortions(grams, doseG);
 
   // Check if scanned weight matches a common weight
   const scannedGrams = parseGrams(data.weight);
@@ -644,6 +649,50 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
           )}
         </div>
       </div>
+      {/* Storage method toggle */}
+      <div style={{ marginTop: 12 }}>
+        <label style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 6 }}>Storage Method</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setWholeBag(false)}
+            style={{
+              flex: 1,
+              padding: "10px 12px",
+              background: !wholeBag ? "var(--ice)" : "#fff",
+              color: !wholeBag ? "#fff" : "var(--text)",
+              border: `1.5px solid ${!wholeBag ? "var(--ice)" : "var(--border)"}`,
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              textAlign: "center",
+            }}
+          >
+            <div>Portion</div>
+            <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>Split into portions</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setWholeBag(true)}
+            style={{
+              flex: 1,
+              padding: "10px 12px",
+              background: wholeBag ? "var(--ice)" : "#fff",
+              color: wholeBag ? "#fff" : "var(--text)",
+              border: `1.5px solid ${wholeBag ? "var(--ice)" : "var(--border)"}`,
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              textAlign: "center",
+            }}
+          >
+            <div>Whole Bag</div>
+            <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>Keep as one unit</div>
+          </button>
+        </div>
+      </div>
       {/* Altitude selector */}
       <div style={{ marginTop: 12 }}>
         <label style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 4 }}>Altitude Category</label>
@@ -668,7 +717,7 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
       </div>
       {/* Grind Prediction */}
       <GrindPredictionCard coffee={f} baseline={baseline} allCoffees={allCoffees} />
-      {grams > 0 && <PortionPlanPreview plan={plan} />}
+      {grams > 0 && <PortionPlanPreview plan={plan} wholeBag={wholeBag} />}
       {f.roastDate && (() => {
         const roast = new Date(f.roastDate);
         const freezeDate = new Date(roast.getTime() + 14 * 86400000);
@@ -685,7 +734,7 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
         }
       })()}
       <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-        <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit(f); }}
+        <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit({ ...f, wholeBag }); }}
           style={{ flex: 1, padding: "9px 0", background: f.name && grams > 0 ? "var(--accent-dark)" : "var(--border)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>Add to Freezer</button>
         <button onClick={(e) => { e.stopPropagation(); onCancel(); }}
           style={{ padding: "9px 16px", background: "none", color: "var(--muted)", border: "1px solid var(--border)", borderRadius: 7, fontSize: 13 }}>Discard</button>
@@ -836,7 +885,10 @@ export default function Home() {
 
   const addCoffee = async (data, rating) => {
     const grams = parseGrams(data.weight);
-    const plan = optimizePortions(grams, doseG || DEFAULT_DOSE_G);
+    const effectiveDoseG = doseG || DEFAULT_DOSE_G;
+    const plan = data.wholeBag
+      ? { portions: [{ grams, doses: Math.floor(grams / effectiveDoseG), buffer: grams % effectiveDoseG }] }
+      : optimizePortions(grams, effectiveDoseG);
     const prediction = calculateGrindOffset(data);
 
     // Upload label image to storage if present
@@ -899,9 +951,25 @@ export default function Home() {
     <>
       <Head>
         <title>Channeling</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+        <meta name="description" content="Coffee inventory tracker" />
+
+        {/* PWA */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#5C2D0E" />
+        <meta name="mobile-web-app-capable" content="yes" />
+
+        {/* iOS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#F5F0EB" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Channeling" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+
+        {/* Favicon */}
+        <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+
+        {/* Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Caveat:wght@400;700&family=Dancing+Script:wght@400;700&family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet" />

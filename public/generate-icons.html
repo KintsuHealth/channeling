@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate Channeling Icons</title>
+  <style>
+    body { font-family: system-ui; padding: 40px; background: #f5f0eb; }
+    .icon { margin: 20px; display: inline-block; }
+    canvas { border-radius: 20%; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    button { margin: 10px; padding: 12px 24px; background: #5C2D0E; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+    button:hover { background: #6B4423; }
+    h1 { color: #5C2D0E; }
+  </style>
+</head>
+<body>
+  <h1>Channeling App Icons</h1>
+  <p>Right-click each icon and "Save Image As" to download:</p>
+
+  <div class="icon">
+    <canvas id="icon512" width="512" height="512"></canvas>
+    <br><button onclick="download(512)">Download 512x512</button>
+  </div>
+
+  <div class="icon">
+    <canvas id="icon192" width="192" height="192"></canvas>
+    <br><button onclick="download(192)">Download 192x192</button>
+  </div>
+
+  <script>
+    function drawIcon(canvas) {
+      const size = canvas.width;
+      const ctx = canvas.getContext('2d');
+      const scale = size / 512;
+
+      // Background gradient
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#6B4423');
+      gradient.addColorStop(1, '#5C2D0E');
+
+      // Rounded rect
+      const radius = 96 * scale;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, size, size, radius);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Stream style
+      ctx.strokeStyle = '#F5F0EB';
+      ctx.lineWidth = 28 * scale;
+      ctx.lineCap = 'round';
+
+      // Left stream
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(156 * scale, 140 * scale);
+      ctx.quadraticCurveTo(156 * scale, 256 * scale, 180 * scale, 320 * scale);
+      ctx.quadraticCurveTo(204 * scale, 384 * scale, 180 * scale, 440 * scale);
+      ctx.stroke();
+
+      // Center stream
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.moveTo(256 * scale, 100 * scale);
+      ctx.lineTo(256 * scale, 440 * scale);
+      ctx.stroke();
+
+      // Right stream
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(356 * scale, 140 * scale);
+      ctx.quadraticCurveTo(356 * scale, 256 * scale, 332 * scale, 320 * scale);
+      ctx.quadraticCurveTo(308 * scale, 384 * scale, 332 * scale, 440 * scale);
+      ctx.stroke();
+
+      // Pool at bottom
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#F5F0EB';
+      ctx.beginPath();
+      ctx.ellipse(256 * scale, 456 * scale, 120 * scale, 24 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function download(size) {
+      const canvas = document.getElementById('icon' + size);
+      const link = document.createElement('a');
+      link.download = 'icon-' + size + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    // Draw both icons
+    drawIcon(document.getElementById('icon512'));
+    drawIcon(document.getElementById('icon192'));
+  </script>
+</body>
+</html>
