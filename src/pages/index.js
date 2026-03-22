@@ -640,7 +640,7 @@ export default function Home() {
                             {more > 0 ? "Portion done → freezer" : "Bag finished"}
                           </button>
                           <button onClick={(e) => { e.stopPropagation(); update(active.id, { status: "frozen" }); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--ice)", color: "var(--ice)", borderRadius: 7, fontSize: 12 }} title="Put back in freezer">❄</button>
-                          <button onClick={(e) => { e.stopPropagation(); if (confirm("Delete this coffee?")) del(active.id); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 7, fontSize: 12 }} title="Delete">✕</button>
+                          <button onClick={(e) => { e.stopPropagation(); del(active.id); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 7, fontSize: 12 }} title="Delete">✕</button>
                         </div>
                       </div>
                     );
@@ -776,7 +776,7 @@ export default function Home() {
                           {!c.isActiveRemaining && <button onClick={(e) => { e.stopPropagation(); pull(c.id); }} style={{ flex: 1, padding: "8px 0", background: "var(--ice)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>Pull a portion</button>}
                           {c.isActiveRemaining && <div style={{ flex: 1, padding: "8px 0", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 7, fontSize: 12, fontWeight: 600, textAlign: "center", color: "var(--active)" }}>Finish active portion first</div>}
                           <button onClick={(e) => { e.stopPropagation(); update(c.id, { favorite: !c.favorite }); }} style={{ padding: "8px 14px", background: "none", border: `1px solid ${c.favorite ? "var(--star)" : "var(--border)"}`, color: c.favorite ? "var(--star)" : "var(--muted)", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>{c.favorite ? "★" : "☆"}</button>
-                          <button onClick={(e) => { e.stopPropagation(); if (confirm("Delete this coffee?")) del(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 7, fontSize: 12 }}>✕</button>
+                          <button onClick={(e) => { e.stopPropagation(); del(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 7, fontSize: 12 }}>✕</button>
                         </div>
                       </div>
                     )}
@@ -840,7 +840,7 @@ export default function Home() {
                       <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.country}{c.variety ? ` · ${c.variety}` : ""} · {c.gramsTotal}g · {fmtFull(c.addedAt)}</div>
                       <Stars value={c.rating || 0} size={12} />
                     </div>
-                    <button onClick={(e) => { e.stopPropagation(); if (confirm("Delete this coffee?")) del(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 5, fontSize: 11 }}>✕</button>
+                    <button onClick={(e) => { e.stopPropagation(); del(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 5, fontSize: 11 }}>✕</button>
                   </div>
                 </div>
               ))}
