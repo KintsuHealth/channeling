@@ -51,6 +51,74 @@ export function AuthProvider({ children }) {
     return { error: null };
   }, []);
 
+  const signInWithPassword = useCallback(async (email, password) => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      setError('Supabase not configured');
+      return { error: { message: 'Supabase not configured' } };
+    }
+
+    setError(null);
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setError(error.message);
+      return { error };
+    }
+
+    return { error: null };
+  }, []);
+
+  const signUp = useCallback(async (email, password) => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      setError('Supabase not configured');
+      return { error: { message: 'Supabase not configured' } };
+    }
+
+    setError(null);
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
+    });
+
+    if (error) {
+      setError(error.message);
+      return { error };
+    }
+
+    return { error: null };
+  }, []);
+
+  const signInWithGoogle = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      setError('Supabase not configured');
+      return { error: { message: 'Supabase not configured' } };
+    }
+
+    setError(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+
+    if (error) {
+      setError(error.message);
+      return { error };
+    }
+
+    return { error: null };
+  }, []);
+
   const signOut = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) return;
@@ -60,7 +128,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, error, signIn, signInWithPassword, signInWithGoogle, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
