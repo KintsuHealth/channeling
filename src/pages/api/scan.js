@@ -35,43 +35,32 @@ export default async function handler(req, res) {
             },
             {
               type: "text",
-              text: `You are a coffee bag label parser. Extract label info AND the EXACT 4 corners of the label for perspective correction.
+              text: `You are a coffee bag label parser. Extract coffee details and the bag's visual design colors.
 
 Return ONLY a raw JSON object — no markdown, no backticks, no explanation:
 {
-  "name": "coffee name or blend (exactly as written on label)",
+  "name": "coffee name or blend",
   "country": "origin country",
   "region": "specific region",
   "variety": "coffee variety (Bourbon, Typica, Geisha, Tabi, SL28, Caturra, etc.)",
   "producer": "farm name and/or producer name",
   "roaster": "roasting company",
-  "roastLevel": "Light, Medium, Medium-Dark, or Dark — infer from visual indicators if not stated",
-  "process": "Washed, Natural, Honey, Anaerobic, Carbonic Maceration, etc.",
+  "roastLevel": "Light, Medium, Medium-Dark, or Dark",
+  "process": "Washed, Natural, Honey, Anaerobic, etc.",
   "altitude": "growing altitude if listed",
   "weight": "bag weight with unit (e.g. 300g, 250g, 12oz, 1lb)",
   "price": "price if visible",
-  "tastingNotes": "tasting notes / cup profile / flavor descriptors",
-  "rawNotes": "harvest date, certifications, or any other notable text",
-  "labelCorners": {
-    "topLeft": { "x": 0.15, "y": 0.42 },
-    "topRight": { "x": 0.85, "y": 0.44 },
-    "bottomLeft": { "x": 0.14, "y": 0.88 },
-    "bottomRight": { "x": 0.86, "y": 0.90 }
-  },
-  "labelColors": {
-    "background": "#FFFFFF",
-    "border": "#C41E3A",
-    "text": "#000000"
-  }
+  "tastingNotes": "tasting notes / flavor descriptors",
+  "rawNotes": "harvest date, certifications, other notable text",
+  "bagColor": "#C41E3A",
+  "textColor": "#FFFFFF"
 }
 
-CRITICAL - labelCorners: Find the main coffee information sticker/label on the bag (usually contains coffee name, origin, variety, process). Identify the EXACT 4 corners of this label as decimals from 0 to 1:
-- x: horizontal position (0 = left edge of image, 1 = right edge)
-- y: vertical position (0 = top of image, 1 = bottom)
+For bagColor: extract the PRIMARY/DOMINANT color of the coffee bag as a hex code. This is usually the main bag color (red, black, white, kraft brown, green, etc.)
 
-The corners may NOT form a perfect rectangle if the label is at an angle or the bag is curved. That's expected - we will use perspective transform to flatten it.
+For textColor: pick white (#FFFFFF) if bagColor is dark, or black/dark (#1A1A1A) if bagColor is light. This ensures readable contrast.
 
-Be as PRECISE as possible with corner positions - trace along the actual edge of the label sticker. For labelColors, extract the label's background color, any border color, and primary text color.`,
+Use null for any field not visible. Be precise with the hex color - it will be used to create a digital label card.`,
             },
           ],
         },

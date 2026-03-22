@@ -58,13 +58,12 @@ function LabelThumbnail({ src, size = 48, expandable = true }) {
   );
 }
 
-// Styled label card - recreates the label's visual design
+// Clean digital label card using bag colors
 function LabelCard({ coffee, size = "medium" }) {
-  const design = coffee.labelDesign || {};
-  const bgColor = design.bgColor || coffee.bagColor || "#8B7355";
-  const accentColor = design.accentColor || bgColor;
+  const bgColor = coffee.bagColor || "#6B4423";
+  const textColor = coffee.textColor || "#FFFFFF";
 
-  // Determine if bg is dark (for fallback text contrast)
+  // Calculate if we need light or dark text
   const isDark = (hex) => {
     if (!hex || !hex.startsWith("#")) return true;
     const c = hex.replace("#", "");
@@ -74,138 +73,101 @@ function LabelCard({ coffee, size = "medium" }) {
     return (r * 0.299 + g * 0.587 + b * 0.114) < 140;
   };
 
-  const textColor = design.textColor || (isDark(bgColor) ? "#FFFFFF" : "#1A1A1A");
-  const subtextColor = isDark(bgColor) ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)";
-
-  // Font mapping based on label style
-  const fontMap = {
-    serif: "'Playfair Display', Georgia, serif",
-    "sans-serif": "'Inter', -apple-system, sans-serif",
-    script: "'Dancing Script', cursive, serif",
-    handwritten: "'Caveat', 'Dancing Script', cursive",
-    display: "'Bebas Neue', 'Impact', sans-serif",
-  };
-  const nameFont = fontMap[design.nameStyle] || fontMap.serif;
-
-  // Weight mapping
-  const weightMap = { light: 300, normal: 400, bold: 700, black: 900 };
-  const nameWeight = weightMap[design.nameWeight] || 700;
-
-  // Text transform based on case
-  const caseMap = { uppercase: "uppercase", lowercase: "lowercase", capitalize: "capitalize", mixed: "none" };
-  const nameCase = caseMap[design.nameCase] || "none";
-
-  // Alignment
-  const alignMap = { centered: "center", left: "flex-start", minimal: "center" };
-  const align = alignMap[design.layout] || "center";
-  const textAlign = design.layout === "left" ? "left" : "center";
+  const dark = isDark(bgColor);
+  const primary = coffee.textColor || (dark ? "#FFFFFF" : "#1A1A1A");
+  const secondary = dark ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0.6)";
+  const tertiary = dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.45)";
 
   const sizes = {
-    small: { width: 64, padding: 6, nameSize: 10, subSize: 7, roasterSize: 6 },
-    medium: { width: 80, padding: 8, nameSize: 12, subSize: 8, roasterSize: 7 },
-    large: { width: 120, padding: 12, nameSize: 16, subSize: 10, roasterSize: 9 },
+    small: { width: 72, height: 72, nameSize: 11, tagSize: 6, roasterSize: 6, padding: 8 },
+    medium: { width: 90, height: 90, nameSize: 13, tagSize: 7, roasterSize: 7, padding: 10 },
+    large: { width: 130, height: 130, nameSize: 16, tagSize: 8, roasterSize: 8, padding: 14 },
   };
   const s = sizes[size] || sizes.medium;
 
-  // Aesthetic-based styling
-  const isMinimal = design.aesthetic === "minimalist" || design.aesthetic === "modern";
-  const isRustic = design.aesthetic === "rustic" || design.aesthetic === "artisan" || design.aesthetic === "vintage";
+  // Get up to 3 tags from country, variety, process
+  const tags = [coffee.country, coffee.variety, coffee.process].filter(Boolean).slice(0, 3);
 
   return (
     <div
       onClick={(e) => e.stopPropagation()}
       style={{
         width: s.width,
-        minHeight: s.width,
-        background: bgColor,
-        borderRadius: isMinimal ? 4 : 8,
+        height: s.height,
+        background: `linear-gradient(145deg, ${bgColor} 0%, ${bgColor}dd 100%)`,
+        borderRadius: 10,
         padding: s.padding,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "center",
-        alignItems: align,
-        textAlign,
-        boxShadow: isMinimal
-          ? "0 1px 3px rgba(0,0,0,0.1)"
-          : "0 2px 8px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1)",
-        border: accentColor !== bgColor ? `2px solid ${accentColor}` : `1px solid rgba(0,0,0,0.1)`,
+        justifyContent: "space-between",
+        boxShadow: "0 3px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15)",
+        border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"}`,
         flexShrink: 0,
         position: "relative",
         overflow: "hidden",
       }}
     >
-      {/* Texture for rustic/artisan */}
-      {isRustic && (
-        <div style={{
-          position: "absolute", inset: 0, opacity: 0.06,
-          background: "repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)",
-          pointerEvents: "none",
-        }} />
-      )}
+      {/* Top section: Roaster */}
+      <div style={{
+        fontSize: s.roasterSize,
+        fontWeight: 600,
+        color: secondary,
+        textTransform: "uppercase",
+        letterSpacing: "0.8px",
+        lineHeight: 1,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}>
+        {coffee.roaster || ""}
+      </div>
 
-      {/* Roaster name */}
-      {coffee.roaster && (
-        <div style={{
-          fontSize: s.roasterSize,
-          fontWeight: 500,
-          color: subtextColor,
-          textTransform: "uppercase",
-          letterSpacing: "0.8px",
-          marginBottom: 2,
-          lineHeight: 1.2,
-          maxWidth: "100%",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          fontFamily: "'Inter', sans-serif",
-        }}>
-          {coffee.roaster}
-        </div>
-      )}
-
-      {/* Coffee name - styled to match original */}
+      {/* Middle: Coffee name */}
       <div style={{
         fontSize: s.nameSize,
-        fontWeight: nameWeight,
-        color: textColor,
-        lineHeight: 1.1,
-        marginBottom: 4,
-        fontFamily: nameFont,
-        textTransform: nameCase,
-        letterSpacing: design.nameStyle === "display" ? "1px" : "0",
+        fontWeight: 700,
+        color: primary,
+        lineHeight: 1.15,
+        fontFamily: "'Playfair Display', Georgia, serif",
+        textAlign: "center",
         wordBreak: "break-word",
-        hyphens: "auto",
+        display: "-webkit-box",
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: "vertical",
+        overflow: "hidden",
       }}>
         {coffee.name || "Unnamed"}
       </div>
 
-      {/* Origin */}
-      {(coffee.country || coffee.region) && (
-        <div style={{
-          fontSize: s.subSize,
-          color: subtextColor,
-          lineHeight: 1.2,
-          marginBottom: 1,
-          fontFamily: "'Inter', sans-serif",
-        }}>
-          {[coffee.country, coffee.region].filter(Boolean).join(" · ")}
-        </div>
-      )}
-
-      {/* Process */}
-      {coffee.process && (
-        <div style={{
-          fontSize: s.subSize - 1,
-          color: subtextColor,
-          lineHeight: 1.2,
-          fontStyle: isRustic ? "italic" : "normal",
-          textTransform: isMinimal ? "uppercase" : "none",
-          letterSpacing: isMinimal ? "0.5px" : "0",
-          fontFamily: "'Inter', sans-serif",
-        }}>
-          {coffee.process}
-        </div>
-      )}
+      {/* Bottom: Tags */}
+      <div style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 3,
+        justifyContent: "center",
+      }}>
+        {tags.map((tag, i) => (
+          <span
+            key={i}
+            style={{
+              fontSize: s.tagSize,
+              fontWeight: 500,
+              color: primary,
+              background: dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.08)",
+              padding: "2px 5px",
+              borderRadius: 3,
+              textTransform: "uppercase",
+              letterSpacing: "0.3px",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              maxWidth: "100%",
+            }}
+          >
+            {tag.length > 10 ? tag.slice(0, 9) + "…" : tag}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -431,117 +393,6 @@ const compressImage = (file, maxSizeBytes = 4 * 1024 * 1024) => {
   });
 };
 
-// Perspective transform: extract and flatten a quadrilateral label from image
-const extractLabel = (imageSrc, corners, colors) => {
-  return new Promise((resolve) => {
-    if (!corners || !corners.topLeft || !corners.topRight || !corners.bottomLeft || !corners.bottomRight) {
-      resolve(null);
-      return;
-    }
-
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const { width: imgW, height: imgH } = img;
-
-      // Convert percentage coordinates to pixels
-      const src = {
-        tl: { x: corners.topLeft.x * imgW, y: corners.topLeft.y * imgH },
-        tr: { x: corners.topRight.x * imgW, y: corners.topRight.y * imgH },
-        bl: { x: corners.bottomLeft.x * imgW, y: corners.bottomLeft.y * imgH },
-        br: { x: corners.bottomRight.x * imgW, y: corners.bottomRight.y * imgH },
-      };
-
-      // Calculate output dimensions based on the longest edges
-      const topWidth = Math.sqrt(Math.pow(src.tr.x - src.tl.x, 2) + Math.pow(src.tr.y - src.tl.y, 2));
-      const bottomWidth = Math.sqrt(Math.pow(src.br.x - src.bl.x, 2) + Math.pow(src.br.y - src.bl.y, 2));
-      const leftHeight = Math.sqrt(Math.pow(src.bl.x - src.tl.x, 2) + Math.pow(src.bl.y - src.tl.y, 2));
-      const rightHeight = Math.sqrt(Math.pow(src.br.x - src.tr.x, 2) + Math.pow(src.br.y - src.tr.y, 2));
-
-      const outW = Math.round(Math.max(topWidth, bottomWidth));
-      const outH = Math.round(Math.max(leftHeight, rightHeight));
-
-      // Create output canvas with padding for border
-      const padding = 6;
-      const borderWidth = 4;
-      const canvas = document.createElement("canvas");
-      canvas.width = outW + (padding + borderWidth) * 2;
-      canvas.height = outH + (padding + borderWidth) * 2;
-      const ctx = canvas.getContext("2d");
-
-      // Fill background with border color
-      ctx.fillStyle = colors?.border || "#C41E3A";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Inner background
-      ctx.fillStyle = colors?.background || "#FFFFFF";
-      ctx.fillRect(borderWidth, borderWidth, canvas.width - borderWidth * 2, canvas.height - borderWidth * 2);
-
-      // Create a temporary canvas for the source image
-      const srcCanvas = document.createElement("canvas");
-      srcCanvas.width = imgW;
-      srcCanvas.height = imgH;
-      const srcCtx = srcCanvas.getContext("2d");
-      srcCtx.drawImage(img, 0, 0);
-      const srcData = srcCtx.getImageData(0, 0, imgW, imgH);
-
-      // Create output image data
-      const outCanvas = document.createElement("canvas");
-      outCanvas.width = outW;
-      outCanvas.height = outH;
-      const outCtx = outCanvas.getContext("2d");
-      const outData = outCtx.createImageData(outW, outH);
-
-      // Perspective transform using bilinear interpolation
-      for (let y = 0; y < outH; y++) {
-        for (let x = 0; x < outW; x++) {
-          // Normalized coordinates in output (0 to 1)
-          const u = x / (outW - 1);
-          const v = y / (outH - 1);
-
-          // Bilinear interpolation to find source position
-          const topX = src.tl.x + u * (src.tr.x - src.tl.x);
-          const topY = src.tl.y + u * (src.tr.y - src.tl.y);
-          const botX = src.bl.x + u * (src.br.x - src.bl.x);
-          const botY = src.bl.y + u * (src.br.y - src.bl.y);
-
-          const srcX = topX + v * (botX - topX);
-          const srcY = topY + v * (botY - topY);
-
-          // Sample source pixel (with bounds checking)
-          const sx = Math.round(srcX);
-          const sy = Math.round(srcY);
-          if (sx >= 0 && sx < imgW && sy >= 0 && sy < imgH) {
-            const srcIdx = (sy * imgW + sx) * 4;
-            const outIdx = (y * outW + x) * 4;
-            outData.data[outIdx] = srcData.data[srcIdx];
-            outData.data[outIdx + 1] = srcData.data[srcIdx + 1];
-            outData.data[outIdx + 2] = srcData.data[srcIdx + 2];
-            outData.data[outIdx + 3] = 255;
-          }
-        }
-      }
-
-      outCtx.putImageData(outData, 0, 0);
-
-      // Apply image enhancement: increase contrast and sharpness
-      outCtx.filter = "contrast(1.1) saturate(1.05)";
-      outCtx.drawImage(outCanvas, 0, 0);
-
-      // Draw the transformed label onto the final canvas with border
-      ctx.drawImage(outCanvas, padding + borderWidth, padding + borderWidth);
-
-      // Add subtle shadow
-      ctx.shadowColor = "rgba(0,0,0,0.15)";
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetY = 3;
-
-      resolve(canvas.toDataURL("image/jpeg", 0.95));
-    };
-    img.onerror = () => resolve(null);
-    img.src = imageSrc;
-  });
-};
 
 const EMPTY = { name: "", country: "", region: "", variety: "", producer: "", roaster: "", roastLevel: "", process: "", altitude: "", weight: "", price: "", tastingNotes: "", roastDate: "" };
 
@@ -718,7 +569,6 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
   const [parsed, setParsed] = useState(null);
-  const [croppedLabel, setCroppedLabel] = useState(null);
   const [manualMode, setManualMode] = useState(false);
   const [pendingRating, setPendingRating] = useState(0);
   const [view, setView] = useState("morning");
@@ -794,7 +644,6 @@ export default function Home() {
     });
 
     setScanning(true);
-    setCroppedLabel(null);
     try {
       const resp = await fetch("/api/scan", {
         method: "POST",
@@ -803,20 +652,6 @@ export default function Home() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || `Server error ${resp.status}`);
-
-      // Extract and flatten the label using corner coordinates from AI
-      if (data.labelCorners) {
-        const previewDataUrl = await new Promise((res) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result);
-          r.readAsDataURL(processedFile);
-        });
-        const extracted = await extractLabel(previewDataUrl, data.labelCorners, data.labelColors);
-        if (extracted) {
-          setCroppedLabel(extracted);
-        }
-      }
-
       setParsed(data);
     } catch (err) {
       setError(`Scan failed: ${err.message}`);
@@ -834,13 +669,12 @@ export default function Home() {
       frozenAt: new Date().toISOString(), rating: rating || 0,
       gramsTotal: grams, portions: plan.portions, portionIndex: 0, dosesUsed: 0,
       status: "frozen", espresso: null, favorite: false, doseG,
-      labelImage: preview, // Store the full scanned image
-      croppedLabel: croppedLabel, // Store the cropped label
+      labelImage: preview,
     }, ...prev]);
-    setParsed(null); setPreview(null); setCroppedLabel(null); setPendingRating(0); setManualMode(false); setError(null); setView("freezer");
+    setParsed(null); setPreview(null); setPendingRating(0); setManualMode(false); setError(null); setView("freezer");
   };
 
-  const resetScan = () => { setParsed(null); setPreview(null); setCroppedLabel(null); setManualMode(false); setError(null); };
+  const resetScan = () => { setParsed(null); setPreview(null); setManualMode(false); setError(null); };
   const handleDrop = useCallback((e) => { e.preventDefault(); handleFile(e.dataTransfer?.files?.[0]); }, [handleFile]);
   const rp = (c) => c.portions.length - c.portionIndex;
   const rg = (c) => c.portions.slice(c.portionIndex).reduce((s, p) => s + p.grams, 0);
@@ -897,7 +731,7 @@ export default function Home() {
                       <div key={active.id} style={{ background: "var(--active-bg)", border: "1.5px solid var(--active)", borderRadius: 10, padding: "16px 18px", marginBottom: 12 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                           <div style={{ display: "flex", gap: 12, flex: 1 }}>
-                            {active.croppedLabel ? <LabelThumbnail src={active.croppedLabel} size={80} /> : (active.labelDesign || active.bagColor) ? <LabelCard coffee={active} size="large" /> : active.labelImage && <LabelThumbnail src={active.labelImage} size={64} />}
+                            {active.bagColor ? <LabelCard coffee={active} size="large" /> : active.labelImage && <LabelThumbnail src={active.labelImage} size={64} />}
                             <div>
                               <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{active.name || "Unnamed"}</div>
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
@@ -954,7 +788,7 @@ export default function Home() {
                   {frozen.slice(0, 3).map((c) => (
                     <div key={c.id} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                        {c.croppedLabel ? <LabelThumbnail src={c.croppedLabel} size={52} /> : (c.labelDesign || c.bagColor) ? <LabelCard coffee={c} size="small" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={44} />}
+                        {c.bagColor ? <LabelCard coffee={c} size="small" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={44} />}
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 14, fontWeight: 600 }}>{c.name || "Unnamed"}</div>
                           <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.country}{c.variety ? ` · ${c.variety}` : ""} · {rp(c)} portion{rp(c) !== 1 ? "s" : ""} · {rg(c)}g</div>
@@ -999,7 +833,7 @@ export default function Home() {
                 return (
                   <div key={c.id} onClick={() => setExpanded(isExp ? null : c.id)} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", marginBottom: 10, cursor: "pointer", boxShadow: isExp ? "0 3px 16px rgba(92,45,14,0.06)" : "none" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                      {c.croppedLabel ? <LabelThumbnail src={c.croppedLabel} size={64} /> : (c.labelDesign || c.bagColor) ? <LabelCard coffee={c} size="medium" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={56} />}
+                      {c.bagColor ? <LabelCard coffee={c} size="medium" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={56} />}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, marginBottom: 3 }}>
                           {c.name || "Unnamed"} {c.favorite && <span style={{ color: "var(--star)", fontSize: 13 }}>★</span>}
@@ -1033,13 +867,9 @@ export default function Home() {
                     </div>
                     {isExp && (
                       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-                        {(c.croppedLabel || c.labelDesign || c.bagColor || c.labelImage) && (
+                        {(c.bagColor || c.labelImage) && (
                           <div style={{ marginBottom: 12, display: "flex", justifyContent: "center", gap: 12, alignItems: "center" }}>
-                            {c.croppedLabel ? (
-                              <LabelThumbnail src={c.croppedLabel} size={140} />
-                            ) : (c.labelDesign || c.bagColor) ? (
-                              <LabelCard coffee={c} size="large" />
-                            ) : null}
+                            {c.bagColor && <LabelCard coffee={c} size="large" />}
                             {c.labelImage && <LabelThumbnail src={c.labelImage} size={80} />}
                           </div>
                         )}
