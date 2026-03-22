@@ -93,16 +93,16 @@ function LabelCard({ coffee, size = "medium" }) {
 
   // Increased sizes for better readability
   const sizes = {
-    small: { width: 88, height: 100, nameSize: 12, tagSize: 7, roasterSize: 7, padding: 10, gap: 4 },
-    medium: { width: 110, height: 120, nameSize: 14, tagSize: 8, roasterSize: 8, padding: 12, gap: 5 },
-    large: { width: 150, height: 160, nameSize: 18, tagSize: 9, roasterSize: 9, padding: 16, gap: 6 },
+    small: { width: 90, height: 110, nameSize: 11, tagSize: 7, roasterSize: 6, padding: 8, gap: 3 },
+    medium: { width: 115, height: 135, nameSize: 13, tagSize: 8, roasterSize: 7, padding: 10, gap: 3 },
+    large: { width: 155, height: 175, nameSize: 16, tagSize: 9, roasterSize: 8, padding: 14, gap: 4 },
   };
   const s = sizes[size] || sizes.medium;
 
-  // Build tags: country code, variety, process (abbreviated if needed)
+  // Build tags: country code, variety, process
   const countryCode = getCountryCode(coffee.country);
-  const variety = coffee.variety ? (coffee.variety.length > 8 ? coffee.variety.slice(0, 7) + "." : coffee.variety) : null;
-  const process = coffee.process ? (coffee.process.length > 10 ? coffee.process.slice(0, 9) + "." : coffee.process) : null;
+  const variety = coffee.variety || null;
+  const process = coffee.process || null;
   const tags = [countryCode, variety, process].filter(Boolean);
 
   return (
@@ -164,26 +164,29 @@ function LabelCard({ coffee, size = "medium" }) {
         </div>
       </div>
 
-      {/* Bottom: Tags in a row */}
+      {/* Bottom: Tags stacked vertically */}
       <div style={{
         display: "flex",
+        flexDirection: "column",
         gap: s.gap,
-        justifyContent: "center",
-        flexWrap: "nowrap",
+        alignItems: "center",
       }}>
         {tags.map((tag, i) => (
           <span
             key={i}
             style={{
               fontSize: s.tagSize,
-              fontWeight: 600,
+              fontWeight: 500,
               color: primary,
-              background: dark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.1)",
-              padding: "3px 6px",
+              background: dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.08)",
+              padding: "2px 8px",
               borderRadius: 4,
               textTransform: "uppercase",
-              letterSpacing: "0.2px",
+              letterSpacing: "0.3px",
               whiteSpace: "nowrap",
+              maxWidth: "100%",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
             {tag}
