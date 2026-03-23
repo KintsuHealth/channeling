@@ -481,20 +481,72 @@ function EspressoRecipe({ recipe, onChange, coffee, baseline, allCoffees }) {
     </div>
   );
 
-  // Display existing recipe - make it prominent
+  // Display existing recipe - make it prominent with grind as hero
   return (
-    <div onClick={(e) => { e.stopPropagation(); setEditing(true); }} style={{ marginTop: 10, padding: 12, background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)", borderRadius: 8, border: "2px solid var(--accent-light, #E8D5C4)", cursor: "pointer", boxShadow: "0 2px 8px rgba(92,45,14,0.08)" }}>
-      <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 }}>● Saved Recipe — tap to edit</div>
-      <div style={{ display: "flex", gap: 10, fontSize: 13, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--text)", fontWeight: 500 }}>
-        {recipe.dose && <span>{recipe.dose}g →</span>}
-        {recipe.yield && <span>{recipe.yield}g</span>}
+    <div onClick={(e) => { e.stopPropagation(); setEditing(true); }} style={{ marginTop: 12, padding: 14, background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)", borderRadius: 10, border: "2px solid var(--accent-light, #E8D5C4)", cursor: "pointer", boxShadow: "0 2px 8px rgba(92,45,14,0.08)" }}>
+      <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 10 }}>● Dialed Recipe — tap to edit</div>
+
+      {/* Grind Setting - Hero Element */}
+      {(recipe.grind || recipe.feedSpeed) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, padding: "10px 12px", background: "var(--accent-dark)", borderRadius: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Grind</div>
+          <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "#fff", letterSpacing: "-1px" }}>
+            {recipe.grind || "—"}
+          </div>
+          {recipe.feedSpeed && (
+            <div style={{ marginLeft: "auto", padding: "4px 10px", background: "rgba(255,255,255,0.2)", borderRadius: 4, fontSize: 11, fontWeight: 600, color: "#fff", textTransform: "capitalize" }}>
+              {recipe.feedSpeed}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Recipe Details Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+        {/* Dose/Yield */}
+        {(recipe.dose || recipe.yield) && (
+          <div style={{ padding: "8px 10px", background: "rgba(255,255,255,0.6)", borderRadius: 6, border: "1px solid rgba(0,0,0,0.06)" }}>
+            <div style={{ fontSize: 9, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>Ratio</div>
+            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
+              {recipe.dose || "—"}g → {recipe.yield || "—"}g
+            </div>
+          </div>
+        )}
+
+        {/* Time */}
+        {recipe.totalTime && (
+          <div style={{ padding: "8px 10px", background: "rgba(255,255,255,0.6)", borderRadius: 6, border: "1px solid rgba(0,0,0,0.06)" }}>
+            <div style={{ fontSize: 9, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>Time</div>
+            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
+              {recipe.totalTime}s
+            </div>
+            {(recipe.preInfuse || recipe.brewTime) && (
+              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+                {recipe.preInfuse && <span>Pre: {recipe.preInfuse}s</span>}
+                {recipe.preInfuse && recipe.brewTime && <span> · </span>}
+                {recipe.brewTime && <span>Brew: {recipe.brewTime}s</span>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Temperature */}
+        {recipe.temp && (
+          <div style={{ padding: "8px 10px", background: "rgba(255,255,255,0.6)", borderRadius: 6, border: "1px solid rgba(0,0,0,0.06)" }}>
+            <div style={{ fontSize: 9, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>Temp</div>
+            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
+              {recipe.temp}°{recipe.tempUnit || "C"}
+            </div>
+          </div>
+        )}
       </div>
-      <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--muted)", marginTop: 4 }}>
-        {recipe.totalTime && <span>{recipe.totalTime}s{recipe.preInfuse ? ` (pre:${recipe.preInfuse}s)` : ""}{recipe.brewTime ? ` (brew:${recipe.brewTime}s)` : ""}</span>}
-        {recipe.grind && <span>@{recipe.grind}{recipe.feedSpeed ? ` · ${recipe.feedSpeed}` : ""}</span>}
-        {recipe.temp && <span>{recipe.temp}°{recipe.tempUnit || "C"}</span>}
-      </div>
-      {recipe.notes && <div style={{ marginTop: 6, fontSize: 11, color: "var(--muted)", fontStyle: "italic", borderTop: "1px solid var(--border)", paddingTop: 6 }}>"{recipe.notes}"</div>}
+
+      {/* Notes */}
+      {recipe.notes && (
+        <div style={{ marginTop: 10, fontSize: 11, color: "var(--muted)", fontStyle: "italic", padding: "8px 10px", background: "rgba(255,255,255,0.4)", borderRadius: 6 }}>
+          "{recipe.notes}"
+        </div>
+      )}
     </div>
   );
 }
