@@ -49,12 +49,14 @@ export function useCoffees() {
     if (!supabase) return null;
 
     const now = new Date().toISOString();
+    const status = coffeeData.status || 'frozen';
     const newCoffee = {
       ...coffeeData,
       userId: user.id,
       addedAt: now,
-      frozenAt: now,
-      status: coffeeData.status || 'frozen',
+      // Only set frozenAt if going straight to freezer
+      frozenAt: status === 'frozen' ? now : null,
+      status,
     };
 
     const dbCoffee = toDbFormat(newCoffee);
@@ -107,6 +109,25 @@ export function useCoffees() {
       setError(err.message);
     }
   }, [user]);
+
+  const moveToFreezer = useCallback(async (id) => {
+    if (!user) return;
+
+    const coffee = coffees.find(c => c.id === id);
+    if (!coffee) return;
+
+    const now = new Date();
+    const daysRested = Math.floor((now - new Date(coffee.addedAt)) / 86400000);
+
+    const updates = {
+      status: 'frozen',
+      frozenAt: now.toISOString(),
+      restedAt: now.toISOString(),
+      daysRested: daysRested,
+    };
+
+    await updateCoffee(id, updates);
+  }, [user, coffees, updateCoffee]);
 
   const deleteCoffee = useCallback(async (id) => {
     if (!user) return;
@@ -199,6 +220,7 @@ export function useCoffees() {
     error,
     addCoffee,
     updateCoffee,
+    moveToFreezer,
     deleteCoffee,
     uploadLabelImage,
     importCoffees,

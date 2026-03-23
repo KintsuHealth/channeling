@@ -611,6 +611,18 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
   const [f, setF] = useState(initialData);
   const [manualWeight, setManualWeight] = useState(false);
   const [wholeBag, setWholeBag] = useState(false);
+
+  // Determine default addAs based on roastDate
+  const getDefaultAddAs = () => {
+    if (initialData.roastDate) {
+      const roast = new Date(initialData.roastDate);
+      const daysSinceRoast = Math.floor((Date.now() - roast.getTime()) / 86400000);
+      return daysSinceRoast < 14 ? 'resting' : 'frozen';
+    }
+    return 'frozen';
+  };
+  const [addAs, setAddAs] = useState(getDefaultAddAs);
+
   const set = (k, v) => {
     const updated = { ...f, [k]: v };
     setF(updated);
@@ -745,6 +757,50 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
           </button>
         </div>
       </div>
+      {/* Add As toggle - Resting vs Freezer */}
+      <div style={{ marginTop: 12 }}>
+        <label style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 6 }}>Add As</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setAddAs('resting')}
+            style={{
+              flex: 1,
+              padding: "10px 12px",
+              background: addAs === 'resting' ? "var(--accent)" : "#fff",
+              color: addAs === 'resting' ? "#fff" : "var(--text)",
+              border: `1.5px solid ${addAs === 'resting' ? "var(--accent)" : "var(--border)"}`,
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              textAlign: "center",
+            }}
+          >
+            <div>○ Resting</div>
+            <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>Degas first</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAddAs('frozen')}
+            style={{
+              flex: 1,
+              padding: "10px 12px",
+              background: addAs === 'frozen' ? "var(--ice)" : "#fff",
+              color: addAs === 'frozen' ? "#fff" : "var(--text)",
+              border: `1.5px solid ${addAs === 'frozen' ? "var(--ice)" : "var(--border)"}`,
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              textAlign: "center",
+            }}
+          >
+            <div>❄ Freezer</div>
+            <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>Ready to freeze</div>
+          </button>
+        </div>
+      </div>
       {/* Altitude selector */}
       <div style={{ marginTop: 12 }}>
         <label style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 4 }}>Altitude Category</label>
@@ -786,8 +842,10 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
         }
       })()}
       <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-        <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit({ ...f, wholeBag }); }}
-          style={{ flex: 1, padding: "9px 0", background: f.name && grams > 0 ? "var(--accent-dark)" : "var(--border)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>Add to Freezer</button>
+        <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit({ ...f, wholeBag, status: addAs }); }}
+          style={{ flex: 1, padding: "9px 0", background: f.name && grams > 0 ? (addAs === 'resting' ? "var(--accent)" : "var(--accent-dark)") : "var(--border)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>
+          {addAs === 'resting' ? "Start Resting" : "Add to Freezer"}
+        </button>
         <button onClick={(e) => { e.stopPropagation(); onCancel(); }}
           style={{ padding: "9px 16px", background: "none", color: "var(--muted)", border: "1px solid var(--border)", borderRadius: 7, fontSize: 13 }}>Discard</button>
       </div>
@@ -824,10 +882,122 @@ function ManualEntry({ onSubmit, onCancel }) {
   );
 }
 
+function RestingCard({ coffee, onMoveToFreezer, onDelete, onRatingChange }) {
+  const now = Date.now();
+  const roastDate = coffee.roastDate ? new Date(coffee.roastDate) : null;
+  const addedAt = new Date(coffee.addedAt);
+  const referenceDate = roastDate || addedAt;
+  const daysSinceRoast = Math.floor((now - referenceDate.getTime()) / 86400000);
+  const daysUntilFreeze = Math.max(0, 14 - daysSinceRoast);
+  const isReadyToFreeze = daysUntilFreeze <= 0;
+  const progress = Math.min(100, Math.round((daysSinceRoast / 14) * 100));
+
+  const freezeDate = new Date(referenceDate.getTime() + 14 * 86400000);
+
+  return (
+    <div style={{
+      background: isReadyToFreeze ? "rgba(76, 175, 80, 0.08)" : "var(--card)",
+      border: `1.5px solid ${isReadyToFreeze ? "var(--success)" : "var(--border)"}`,
+      borderRadius: 10,
+      padding: "16px 18px",
+      marginBottom: 12,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        {/* Label card or thumbnail */}
+        {coffee.bagColor ? <LabelCard coffee={coffee} size="medium" /> : coffee.labelImage && <LabelThumbnail src={coffee.labelImage} size={56} />}
+
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, marginBottom: 3 }}>
+            {coffee.name || "Unnamed"}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 4 }}>
+            {coffee.country && <Badge>{coffee.country}</Badge>}
+            {coffee.variety && <Badge bg="#EDE0D0">{coffee.variety}</Badge>}
+          </div>
+          <Stars value={coffee.rating || 0} onChange={onRatingChange} size={14} />
+        </div>
+
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          {isReadyToFreeze ? (
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--success)" }}>Ready to freeze!</div>
+          ) : (
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Day {daysSinceRoast} of 14</div>
+          )}
+        </div>
+      </div>
+
+      {/* Resting status */}
+      <div style={{ marginTop: 12, padding: "10px 12px", background: isReadyToFreeze ? "rgba(76, 175, 80, 0.1)" : "#FAF7F4", borderRadius: 8, border: `1px solid ${isReadyToFreeze ? "var(--success)" : "var(--border)"}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+          <span style={{ fontSize: 14 }}>○</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: isReadyToFreeze ? "var(--success)" : "var(--muted)" }}>
+            {isReadyToFreeze ? "Ready to freeze!" : `Resting · Day ${daysSinceRoast} of 14`}
+          </span>
+        </div>
+
+        {/* Progress bar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ flex: 1, height: 8, background: "#EDE8E2", borderRadius: 4, overflow: "hidden" }}>
+            <div style={{
+              height: "100%",
+              width: `${progress}%`,
+              background: isReadyToFreeze ? "var(--success)" : "var(--accent)",
+              borderRadius: 4,
+              transition: "width 0.3s",
+            }} />
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>{progress}%</span>
+        </div>
+
+        {/* Dates */}
+        <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.6 }}>
+          {roastDate && (
+            <div>Roasted: {roastDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ({daysSinceRoast} day{daysSinceRoast !== 1 ? "s" : ""} ago)</div>
+          )}
+          {!isReadyToFreeze && (
+            <div>Ready to freeze: {freezeDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ({daysUntilFreeze} day{daysUntilFreeze !== 1 ? "s" : ""})</div>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); onMoveToFreezer(coffee.id); }}
+          style={{
+            flex: 1,
+            padding: "9px 0",
+            background: isReadyToFreeze ? "var(--ice)" : "var(--card)",
+            color: isReadyToFreeze ? "#fff" : "var(--ice)",
+            border: `1.5px solid var(--ice)`,
+            borderRadius: 7,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          ❄ Move to Freezer
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(coffee.id); }}
+          style={{
+            padding: "9px 14px",
+            background: "none",
+            border: "1px solid var(--error)",
+            color: "var(--error)",
+            borderRadius: 7,
+            fontSize: 12,
+          }}
+        >✕</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main ───
 export default function Home() {
   const { user, signOut } = useAuth();
-  const { coffees, loading: coffeesLoading, addCoffee: addCoffeeToDb, updateCoffee: updateCoffeeInDb, deleteCoffee: deleteCoffeeFromDb, uploadLabelImage } = useCoffees();
+  const { coffees, loading: coffeesLoading, addCoffee: addCoffeeToDb, updateCoffee: updateCoffeeInDb, moveToFreezer, deleteCoffee: deleteCoffeeFromDb, uploadLabelImage } = useCoffees();
   const { baselineGrind, baselineGrindInput, setBaselineGrind, doseG, setDoseG, loading: settingsLoading } = useSettings();
   const loaded = !coffeesLoading && !settingsLoading;
   const [showSettings, setShowSettings] = useState(false);
@@ -851,6 +1021,7 @@ export default function Home() {
   };
 
   const activeCoffees = useMemo(() => coffees.filter((c) => c.status === "active").sort((a, b) => new Date(a.pulledAt) - new Date(b.pulledAt)), [coffees]);
+  const restingCoffees = useMemo(() => coffees.filter((c) => c.status === "resting").sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)), [coffees]);
   const frozen = useMemo(() => coffees.filter((c) => c.status === "frozen").sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)), [coffees]);
   const archive = useMemo(() => coffees.filter((c) => c.status === "done").sort((a, b) => new Date(b.finishedAt || b.addedAt) - new Date(a.finishedAt || a.addedAt)), [coffees]);
   // Include remaining portions from active coffees in freezer totals
@@ -955,6 +1126,9 @@ export default function Home() {
       if (uploadedUrl) labelImage = uploadedUrl;
     }
 
+    // Use the status from data (resting or frozen), defaulting to frozen
+    const status = data.status || "frozen";
+
     const coffeeData = {
       ...data,
       rating: rating || 0,
@@ -962,7 +1136,7 @@ export default function Home() {
       portions: plan.portions,
       portionIndex: 0,
       dosesUsed: 0,
-      status: "frozen",
+      status,
       espresso: null,
       favorite: false,
       doseG: doseG || DEFAULT_DOSE_G,
@@ -979,7 +1153,9 @@ export default function Home() {
         console.error("addCoffeeToDb returned null - check Supabase error");
         return;
       }
-      setParsed(null); setPreview(null); setPendingRating(0); setManualMode(false); setError(null); setView("freezer");
+      setParsed(null); setPreview(null); setPendingRating(0); setManualMode(false); setError(null);
+      // Navigate to appropriate view based on status
+      setView(status === "resting" ? "resting" : "freezer");
     } catch (err) {
       setError(`Failed to save: ${err.message}`);
       console.error("Error adding coffee:", err);
@@ -997,6 +1173,7 @@ export default function Home() {
   const nav = [
     { key: "overview", icon: "◐", label: "Home" },
     { key: "morning", icon: "☀", label: "Active" },
+    { key: "resting", icon: "○", label: "Resting" },
     { key: "freezer", icon: "❄", label: "Freezer" },
     { key: "scan", icon: "◎", label: "Scan" },
     { key: "archive", icon: "≡", label: "Archive" },
@@ -1085,6 +1262,7 @@ export default function Home() {
                 }
               }}
               onPullFromFreezer={() => setView("freezer")}
+              onViewResting={() => setView("resting")}
             />
           )}
 
@@ -1325,6 +1503,36 @@ export default function Home() {
               })}
             </div>
           );})()}
+
+          {/* ─── RESTING ─── */}
+          {view === "resting" && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--accent)", marginBottom: 10 }}>○ Resting — {restingCoffees.length} bag{restingCoffees.length !== 1 ? "s" : ""}</div>
+              {restingCoffees.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", fontSize: 13 }}>
+                  No coffees resting.<br />
+                  <button onClick={() => setView("scan")} style={{ marginTop: 12, padding: "8px 20px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>Scan a bag</button>
+                </div>
+              ) : (
+                restingCoffees.map((c) => (
+                  <RestingCard
+                    key={c.id}
+                    coffee={c}
+                    onMoveToFreezer={moveToFreezer}
+                    onDelete={del}
+                    onRatingChange={(r) => update(c.id, { rating: r })}
+                  />
+                ))
+              )}
+              {stats.readyToFreezeCount > 0 && (
+                <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(76, 175, 80, 0.1)", border: "1px solid var(--success)", borderRadius: 8, textAlign: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--success)" }}>
+                    {stats.readyToFreezeCount} coffee{stats.readyToFreezeCount !== 1 ? "s" : ""} ready to freeze!
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ─── SCAN ─── */}
           {view === "scan" && (

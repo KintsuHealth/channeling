@@ -447,6 +447,86 @@ function BreakdownChart({ icon, title, data, color }) {
   );
 }
 
+// ─── Resting Section ───
+
+function RestingSection({ restingCoffees, readyToFreezeCount, onViewResting }) {
+  if (!restingCoffees || restingCoffees.length === 0) return null;
+
+  return (
+    <div>
+      <SectionHeader icon="○" title="Resting" color="var(--accent)" />
+      <div style={{
+        background: readyToFreezeCount > 0 ? "rgba(76, 175, 80, 0.08)" : "var(--card)",
+        border: `1px solid ${readyToFreezeCount > 0 ? "var(--success)" : "var(--border)"}`,
+        borderRadius: 10,
+        padding: "12px 14px",
+      }}>
+        {readyToFreezeCount > 0 && (
+          <div style={{
+            padding: "8px 12px",
+            background: "rgba(76, 175, 80, 0.15)",
+            borderRadius: 6,
+            marginBottom: 10,
+            textAlign: "center",
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--success)" }}>
+              {readyToFreezeCount} coffee{readyToFreezeCount !== 1 ? "s" : ""} ready to freeze!
+            </span>
+          </div>
+        )}
+
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+          {restingCoffees.length} bag{restingCoffees.length !== 1 ? "s" : ""} degassing
+        </div>
+
+        {/* Mini list of resting coffees */}
+        {restingCoffees.slice(0, 3).map((c) => (
+          <div key={c.id} style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "6px 0",
+            borderBottom: "1px solid var(--border)",
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 500 }}>{c.name || "Unnamed"}</span>
+            <span style={{
+              fontSize: 11,
+              color: c.isReadyToFreeze ? "var(--success)" : "var(--muted)",
+              fontWeight: c.isReadyToFreeze ? 600 : 400,
+            }}>
+              {c.isReadyToFreeze ? "Ready!" : `${c.daysUntilFreeze}d left`}
+            </span>
+          </div>
+        ))}
+
+        {restingCoffees.length > 3 && (
+          <div style={{ fontSize: 11, color: "var(--muted)", paddingTop: 6 }}>
+            +{restingCoffees.length - 3} more
+          </div>
+        )}
+
+        <button
+          onClick={onViewResting}
+          style={{
+            marginTop: 10,
+            width: "100%",
+            padding: "8px 0",
+            background: "none",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            fontSize: 11,
+            color: "var(--accent)",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          View all resting
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Recent Activity Section ───
 
 function RecentActivity({ recentlyAdded, lastFinished }) {
@@ -498,9 +578,12 @@ function RecentActivity({ recentlyAdded, lastFinished }) {
 
 // ─── Main Overview Component ───
 
-export default function Overview({ stats, onUseDose, onPullFromFreezer }) {
+export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewResting }) {
   const {
     activeCoffee,
+    restingCoffees,
+    restingCount,
+    readyToFreezeCount,
     freezerGrams,
     freezerPortions,
     freezerDoses,
@@ -548,6 +631,15 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer }) {
           onPull={onPullFromFreezer}
         />
       </div>
+
+      {/* Resting Section */}
+      {restingCount > 0 && (
+        <RestingSection
+          restingCoffees={restingCoffees}
+          readyToFreezeCount={readyToFreezeCount}
+          onViewResting={onViewResting}
+        />
+      )}
 
       {/* Freezer Stats */}
       {freezerPortions > 0 && (

@@ -1,10 +1,40 @@
 import { useMemo } from "react";
 import { DEFAULT_DOSE_G } from "./portions";
 
+// Calculate effective age for a coffee
+// Formula: daysRested + (daysInFreezer / 30) + daysSincePull
+// 1 month frozen ≈ 1 day of aging
+function calculateEffectiveAge(coffee) {
+  const now = Date.now();
+  let effectiveAge = 0;
+
+  // Days rested before freezing
+  if (coffee.daysRested) {
+    effectiveAge += coffee.daysRested;
+  }
+
+  // Days in freezer (counts as 1/30th of actual days)
+  if (coffee.frozenAt) {
+    const frozenAt = new Date(coffee.frozenAt).getTime();
+    const unfrozenAt = coffee.pulledAt ? new Date(coffee.pulledAt).getTime() : now;
+    const daysInFreezer = Math.floor((unfrozenAt - frozenAt) / 86400000);
+    effectiveAge += daysInFreezer / 30;
+  }
+
+  // Days since pull (full aging rate)
+  if (coffee.pulledAt) {
+    const daysSincePull = Math.floor((now - new Date(coffee.pulledAt).getTime()) / 86400000);
+    effectiveAge += daysSincePull;
+  }
+
+  return Math.round(effectiveAge);
+}
+
 export function useStats(coffees) {
   return useMemo(() => {
     const frozen = coffees.filter((c) => c.status === "frozen");
     const active = coffees.find((c) => c.status === "active");
+    const resting = coffees.filter((c) => c.status === "resting");
     const archive = coffees.filter((c) => c.status === "done");
     const all = coffees;
 
@@ -21,6 +51,33 @@ export function useStats(coffees) {
       (sum, c) => sum + c.portions.slice(c.portionIndex).reduce((s, p) => s + p.doses, 0),
       0
     );
+
+    // ─── Resting Stats ───
+    const restingCoffees = resting.map((c) => {
+      const now = Date.now();
+      const roastDate = c.roastDate ? new Date(c.roastDate) : null;
+      const addedAt = new Date(c.addedAt);
+
+      // Calculate days since roast (use roastDate if available, otherwise addedAt)
+      const referenceDate = roastDate || addedAt;
+      const daysSinceRoast = Math.floor((now - referenceDate.getTime()) / 86400000);
+
+      // 14-day rest period
+      const daysUntilFreeze = 14 - daysSinceRoast;
+      const isReadyToFreeze = daysUntilFreeze <= 0;
+      const progress = Math.min(100, Math.round((daysSinceRoast / 14) * 100));
+
+      return {
+        ...c,
+        daysSinceRoast,
+        daysUntilFreeze: Math.max(0, daysUntilFreeze),
+        isReadyToFreeze,
+        progress,
+      };
+    });
+
+    const restingCount = restingCoffees.length;
+    const readyToFreezeCount = restingCoffees.filter((c) => c.isReadyToFreeze).length;
 
     // ─── Consumption Stats (All Time) ───
     const totalConsumed = archive.reduce((sum, c) => sum + (c.gramsTotal || 0), 0);
@@ -157,6 +214,7 @@ export function useStats(coffees) {
         ? Math.floor((Date.now() - new Date(active.pulledAt).getTime()) / 86400000)
         : 0;
       const remainingPortions = active.portions.length - active.portionIndex - 1;
+      const effectiveAge = calculateEffectiveAge(active);
 
       activeCoffee = {
         ...active,
@@ -166,12 +224,18 @@ export function useStats(coffees) {
         daysSincePulled,
         remainingPortions,
         isStale: daysSincePulled > 7,
+        effectiveAge,
       };
     }
 
     return {
       // Active
       activeCoffee,
+
+      // Resting
+      restingCoffees,
+      restingCount,
+      readyToFreezeCount,
 
       // Freezer
       freezerGrams,
@@ -197,6 +261,12 @@ export function useStats(coffees) {
       // Recent
       recentlyAdded,
       lastFinished,
+
+      // Utilities
+      calculateEffectiveAge,
     };
   }, [coffees]);
 }
+
+// Export for use in components
+export { calculateEffectiveAge };
