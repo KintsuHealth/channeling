@@ -676,6 +676,10 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
   const applySuggestions = () => {
     if (!suggestions?.suggestions) return;
     const updated = { ...f, ...suggestions.suggestions };
+    // Auto-derive altitude category if altitude was suggested
+    if (suggestions.suggestions.altitude && !updated.altitudeCategory) {
+      updated.altitudeCategory = parseAltitude(suggestions.suggestions.altitude);
+    }
     setF(updated);
     onChange(updated);
     setSuggestions(null);

@@ -94,6 +94,17 @@ export function useStats(coffees) {
         ? ratedArchive.reduce((sum, c) => sum + c.rating, 0) / ratedArchive.length
         : 0;
 
+    // Average grind setting from coffees with espresso data
+    const coffeesWithGrind = all.filter((c) => c.espresso?.grind);
+    const avgGrind = coffeesWithGrind.length > 0
+      ? coffeesWithGrind.reduce((sum, c) => {
+          // Parse grind value (handle formats like "4.5", "4.5.0", etc.)
+          const grindStr = String(c.espresso.grind);
+          const grindNum = parseFloat(grindStr);
+          return sum + (isNaN(grindNum) ? 0 : grindNum);
+        }, 0) / coffeesWithGrind.length
+      : null;
+
     // ─── Estimated Days Left ───
     // Calculate average daily consumption based on archive
     let estimatedDaysLeft = null;
@@ -248,6 +259,7 @@ export function useStats(coffees) {
       totalFinished,
       totalDoses,
       avgRating,
+      avgGrind,
 
       // Favorites
       topRated,

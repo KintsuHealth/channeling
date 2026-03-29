@@ -592,6 +592,7 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
     totalFinished,
     totalDoses,
     avgRating,
+    avgGrind,
     topRated,
     topRoasters,
     topCountries,
@@ -631,6 +632,36 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
           onPull={onPullFromFreezer}
         />
       </div>
+
+      {/* Average Grind Quick Reference */}
+      {avgGrind !== null && (
+        <div style={{
+          background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)",
+          border: "1.5px solid var(--accent-light)",
+          borderRadius: 10,
+          padding: "14px 18px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Avg Grind Setting
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+              Based on your dialed-in coffees
+            </div>
+          </div>
+          <div style={{
+            fontSize: 28,
+            fontWeight: 700,
+            fontFamily: "'DM Mono', monospace",
+            color: "var(--accent-dark)",
+          }}>
+            {avgGrind.toFixed(1)}
+          </div>
+        </div>
+      )}
 
       {/* Resting Section */}
       {restingCount > 0 && (
