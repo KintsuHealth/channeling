@@ -978,14 +978,14 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
                 <button
                   key={d}
                   type="button"
-                  onClick={() => setRestingDays(d)}
+                  onClick={(e) => { e.stopPropagation(); setRestingDays(d); }}
                   style={{
-                    padding: "4px 10px",
+                    padding: "6px 12px",
                     background: restingDays === d ? "var(--accent)" : "#fff",
                     color: restingDays === d ? "#fff" : "var(--accent-dark)",
-                    border: `1px solid ${restingDays === d ? "var(--accent)" : "var(--accent)"}`,
-                    borderRadius: 4,
-                    fontSize: 11,
+                    border: `1.5px solid ${restingDays === d ? "var(--accent)" : "var(--accent)"}`,
+                    borderRadius: 6,
+                    fontSize: 12,
                     fontWeight: 600,
                     cursor: "pointer",
                   }}
