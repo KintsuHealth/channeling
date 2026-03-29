@@ -8,6 +8,7 @@ import { optimizePortions, parseGrams, DEFAULT_DOSE_G } from "@/lib/portions";
 import { useStats } from "@/lib/useStats";
 import Overview from "@/components/Overview";
 import { EditCoffeeModal } from "@/components/EditCoffeeModal";
+import { CoffeeDetailModal } from "@/components/CoffeeDetailModal";
 import {
   calculateGrindOffset,
   formatOffset,
@@ -883,7 +884,7 @@ function ManualEntry({ onSubmit, onCancel }) {
   );
 }
 
-function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChange }) {
+function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChange, onView }) {
   const now = Date.now();
   const roastDate = coffee.roastDate ? new Date(coffee.roastDate) : null;
   const addedAt = new Date(coffee.addedAt);
@@ -896,11 +897,14 @@ function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChang
   const freezeDate = new Date(referenceDate.getTime() + 14 * 86400000);
 
   return (
-    <div style={{
+    <div
+      onClick={() => onView && onView(coffee)}
+      style={{
       background: isReadyToFreeze ? "rgba(76, 175, 80, 0.08)" : "var(--card)",
       border: `1.5px solid ${isReadyToFreeze ? "var(--success)" : "var(--border)"}`,
       borderRadius: 10,
       padding: "16px 18px",
+      cursor: onView ? "pointer" : "default",
       marginBottom: 12,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
@@ -1039,6 +1043,7 @@ export default function Home() {
   };
 
   const [editingCoffee, setEditingCoffee] = useState(null);
+  const [viewingCoffee, setViewingCoffee] = useState(null);
   const handleEditSave = async (data) => {
     if (!editingCoffee) return;
     await update(editingCoffee.id, data);
@@ -1333,6 +1338,7 @@ export default function Home() {
                           <button onClick={(e) => { e.stopPropagation(); finishPortion(active); }} style={{ flex: 1, padding: "9px 0", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>
                             {more > 0 ? "Portion done → freezer" : "Bag finished"}
                           </button>
+                          <button onClick={(e) => { e.stopPropagation(); setViewingCoffee(active); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 7, fontSize: 12 }} title="View Details">i</button>
                           <button onClick={(e) => { e.stopPropagation(); setEditingCoffee(active); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 7, fontSize: 12 }} title="Edit">✎</button>
                           <button onClick={(e) => { e.stopPropagation(); update(active.id, { status: "frozen" }); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--ice)", color: "var(--ice)", borderRadius: 7, fontSize: 12 }} title="Put back in freezer">❄</button>
                           <button onClick={(e) => { e.stopPropagation(); del(active.id); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 7, fontSize: 12 }} title="Delete">✕</button>
@@ -1519,6 +1525,7 @@ export default function Home() {
                         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                           {!c.isActiveRemaining && <button onClick={(e) => { e.stopPropagation(); pull(c.id); }} style={{ flex: 1, padding: "8px 0", background: "var(--ice)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>Pull a portion</button>}
                           {c.isActiveRemaining && <div style={{ flex: 1, padding: "8px 0", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 7, fontSize: 12, fontWeight: 600, textAlign: "center", color: "var(--active)" }}>Finish active portion first</div>}
+                          <button onClick={(e) => { e.stopPropagation(); setViewingCoffee(c); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 7, fontSize: 12 }} title="View Details">i</button>
                           <button onClick={(e) => { e.stopPropagation(); setEditingCoffee(c); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 7, fontSize: 12 }} title="Edit">✎</button>
                           <button onClick={(e) => { e.stopPropagation(); update(c.id, { favorite: !c.favorite }); }} style={{ padding: "8px 14px", background: "none", border: `1px solid ${c.favorite ? "var(--star)" : "var(--border)"}`, color: c.favorite ? "var(--star)" : "var(--muted)", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>{c.favorite ? "★" : "☆"}</button>
                           <button onClick={(e) => { e.stopPropagation(); archiveCoffee(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--done)", color: "var(--done)", borderRadius: 7, fontSize: 12 }} title="Archive">✓</button>
@@ -1549,6 +1556,7 @@ export default function Home() {
                     onEdit={setEditingCoffee}
                     onArchive={archiveCoffee}
                     onRatingChange={(r) => update(c.id, { rating: r })}
+                    onView={setViewingCoffee}
                   />
                 ))
               )}
@@ -1607,7 +1615,7 @@ export default function Home() {
               {archive.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", fontSize: 13 }}>Nothing here yet.</div>
               ) : archive.map((c) => (
-                <div key={c.id} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
+                <div key={c.id} onClick={() => setViewingCoffee(c)} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
@@ -1616,7 +1624,10 @@ export default function Home() {
                       <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.country}{c.variety ? ` · ${c.variety}` : ""} · {c.gramsTotal}g · {fmtFull(c.addedAt)}</div>
                       <Stars value={c.rating || 0} size={12} />
                     </div>
-                    <button onClick={(e) => { e.stopPropagation(); del(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 5, fontSize: 11 }}>✕</button>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={(e) => { e.stopPropagation(); setEditingCoffee(c); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 5, fontSize: 11 }} title="Edit">✎</button>
+                      <button onClick={(e) => { e.stopPropagation(); del(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 5, fontSize: 11 }} title="Delete">✕</button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1647,6 +1658,15 @@ export default function Home() {
           coffee={editingCoffee}
           onSave={handleEditSave}
           onCancel={() => setEditingCoffee(null)}
+        />
+      )}
+
+      {/* Detail Modal */}
+      {viewingCoffee && (
+        <CoffeeDetailModal
+          coffee={viewingCoffee}
+          onClose={() => setViewingCoffee(null)}
+          onEdit={(c) => { setViewingCoffee(null); setEditingCoffee(c); }}
         />
       )}
     </>

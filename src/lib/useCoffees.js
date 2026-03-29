@@ -88,12 +88,19 @@ export function useCoffees() {
   }, [user]);
 
   const updateCoffee = useCallback(async (id, updates) => {
-    if (!user) return;
+    if (!user) {
+      console.error("updateCoffee: No user");
+      return;
+    }
 
     const supabase = getSupabase();
-    if (!supabase) return;
+    if (!supabase) {
+      console.error("updateCoffee: No supabase");
+      return;
+    }
 
     const dbUpdates = toDbFormat(updates);
+    console.log("updateCoffee:", id, "updates:", updates, "dbUpdates:", dbUpdates);
 
     try {
       const { error: updateError } = await supabase
@@ -102,19 +109,30 @@ export function useCoffees() {
         .eq('id', id)
         .eq('user_id', user.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("updateCoffee: Error:", updateError);
+        throw updateError;
+      }
 
+      console.log("updateCoffee: Success, updating local state");
       setCoffees(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
     } catch (err) {
+      console.error("updateCoffee: Exception:", err);
       setError(err.message);
     }
   }, [user]);
 
   const moveToFreezer = useCallback(async (id) => {
-    if (!user) return;
+    if (!user) {
+      console.error("moveToFreezer: No user");
+      return;
+    }
 
     const supabase = getSupabase();
-    if (!supabase) return;
+    if (!supabase) {
+      console.error("moveToFreezer: No supabase");
+      return;
+    }
 
     try {
       // Fetch fresh data to avoid stale closure
@@ -125,8 +143,14 @@ export function useCoffees() {
         .eq('user_id', user.id)
         .single();
 
-      if (fetchError || !freshCoffee) {
-        console.error("Failed to fetch coffee:", fetchError);
+      if (fetchError) {
+        console.error("moveToFreezer: Fetch error:", fetchError);
+        setError("Could not find the coffee to move: " + fetchError.message);
+        return;
+      }
+
+      if (!freshCoffee) {
+        console.error("moveToFreezer: No coffee found for id:", id);
         setError("Could not find the coffee to move");
         return;
       }
@@ -139,17 +163,42 @@ export function useCoffees() {
         : new Date(coffee.addedAt);
       const daysRested = Math.floor((now - referenceDate) / 86400000);
 
-      await updateCoffee(id, {
+      const updates = {
+        status: 'frozen',
+        frozen_at: now.toISOString(),
+        rested_at: now.toISOString(),
+        days_rested: daysRested,
+      };
+
+      console.log("moveToFreezer: Updating coffee", id, "with:", updates);
+
+      const { error: updateError } = await supabase
+        .from('coffees')
+        .update(updates)
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (updateError) {
+        console.error("moveToFreezer: Update error:", updateError);
+        setError("Failed to move to freezer: " + updateError.message);
+        return;
+      }
+
+      console.log("moveToFreezer: Success! Updating local state.");
+
+      // Update local state
+      setCoffees(prev => prev.map(c => c.id === id ? {
+        ...c,
         status: 'frozen',
         frozenAt: now.toISOString(),
         restedAt: now.toISOString(),
         daysRested,
-      });
+      } : c));
     } catch (err) {
-      console.error("Error moving to freezer:", err);
+      console.error("moveToFreezer: Exception:", err);
       setError(err.message);
     }
-  }, [user, updateCoffee]);
+  }, [user]);
 
   const archiveCoffee = useCallback(async (id) => {
     await updateCoffee(id, {
