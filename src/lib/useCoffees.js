@@ -163,18 +163,17 @@ export function useCoffees() {
         : new Date(coffee.addedAt);
       const daysRested = Math.floor((now - referenceDate) / 86400000);
 
-      const updates = {
+      const dbUpdates = {
         status: 'frozen',
         frozen_at: now.toISOString(),
         rested_at: now.toISOString(),
-        days_rested: daysRested,
       };
 
-      console.log("moveToFreezer: Updating coffee", id, "with:", updates);
+      console.log("moveToFreezer: Updating coffee", id, "with:", dbUpdates);
 
       const { error: updateError } = await supabase
         .from('coffees')
-        .update(updates)
+        .update(dbUpdates)
         .eq('id', id)
         .eq('user_id', user.id);
 
@@ -186,13 +185,12 @@ export function useCoffees() {
 
       console.log("moveToFreezer: Success! Updating local state.");
 
-      // Update local state
+      // Update local state (daysRested is calculated, not stored in DB)
       setCoffees(prev => prev.map(c => c.id === id ? {
         ...c,
         status: 'frozen',
         frozenAt: now.toISOString(),
         restedAt: now.toISOString(),
-        daysRested,
       } : c));
     } catch (err) {
       console.error("moveToFreezer: Exception:", err);
