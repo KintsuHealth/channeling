@@ -41,6 +41,8 @@ export const fieldMap = {
     userId: 'user_id',
     baselineGrind: 'baseline_grind',
     updatedAt: 'updated_at',
+    targetRestDays: 'target_rest_days',
+    daysRested: 'days_rested',
   },
   fromDb: {
     roast_level: 'roastLevel',
@@ -64,6 +66,8 @@ export const fieldMap = {
     user_id: 'userId',
     baseline_grind: 'baselineGrind',
     updated_at: 'updatedAt',
+    target_rest_days: 'targetRestDays',
+    days_rested: 'daysRested',
   }
 };
 
@@ -75,7 +79,7 @@ const validCoffeeColumns = new Set([
   'status', 'grams_total', 'portions', 'portion_index', 'doses_used', 'dose_g',
   'added_at', 'frozen_at', 'pulled_at', 'finished_at',
   'espresso', 'favorite', 'rating', 'grind_offset_prediction', 'grind_offset_rationale',
-  'grind_confidence'
+  'grind_confidence', 'target_rest_days', 'days_rested'
 ]);
 
 export function toDbFormat(obj, filterUnknown = true) {

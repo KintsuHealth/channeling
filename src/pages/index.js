@@ -20,6 +20,7 @@ import {
   validatePrediction,
   parseAltitude
 } from "@/lib/grindPredictor";
+import { calculateDegasDays, getDegasSuggestion, getFreezeDate } from "@/lib/degasPredictor";
 
 const fmt = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
 const fmtFull = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "");
@@ -617,19 +618,31 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
   const [manualWeight, setManualWeight] = useState(false);
   const [wholeBag, setWholeBag] = useState(false);
 
-  // Determine default addAs based on roastDate
+  // Determine default addAs based on roastDate and smart degas calculation
   const getDefaultAddAs = () => {
     if (initialData.roastDate) {
-      const roast = new Date(initialData.roastDate);
-      const daysSinceRoast = Math.floor((Date.now() - roast.getTime()) / 86400000);
-      return daysSinceRoast < 14 ? 'resting' : 'frozen';
+      const suggestion = getDegasSuggestion(initialData);
+      // If action is 'freeze_now', the coffee is ready to freeze
+      return suggestion.action === 'freeze_now' ? 'frozen' : 'resting';
     }
     return 'frozen';
   };
   const [addAs, setAddAs] = useState(getDefaultAddAs);
 
-  // Resting duration (editable, default 14 days)
-  const [restingDays, setRestingDays] = useState(14);
+  // Calculate smart degas suggestion based on current form data
+  const degasPrediction = useMemo(() => calculateDegasDays(f), [f.roastLevel, f.process, f.altitudeCategory]);
+
+  // Resting duration (editable, initialized with smart suggestion)
+  const [restingDays, setRestingDays] = useState(() => calculateDegasDays(initialData).days);
+
+  // Update restingDays when prediction changes (user edited roast/process/altitude)
+  const [lastSuggestion, setLastSuggestion] = useState(degasPrediction.days);
+  useEffect(() => {
+    if (degasPrediction.days !== lastSuggestion) {
+      setRestingDays(degasPrediction.days);
+      setLastSuggestion(degasPrediction.days);
+    }
+  }, [degasPrediction.days, lastSuggestion]);
 
   // Doses per portion selector
   const [dosesPerPortion, setDosesPerPortion] = useState(DEFAULT_DOSES_PER_PORTION);
@@ -969,39 +982,61 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
             <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>Ready to freeze</div>
           </button>
         </div>
-        {/* Resting duration selector - only show when resting selected */}
+        {/* Resting duration selector with smart suggestion - only show when resting selected */}
         {addAs === 'resting' && (
-          <div style={{ marginTop: 10, padding: "10px 12px", background: "var(--accent-light)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--accent-dark)" }}>Rest for</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {[7, 14, 21].map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setRestingDays(d); }}
-                  style={{
-                    padding: "6px 12px",
-                    background: restingDays === d ? "var(--accent)" : "#fff",
-                    color: restingDays === d ? "#fff" : "var(--accent-dark)",
-                    border: `1.5px solid ${restingDays === d ? "var(--accent)" : "var(--accent)"}`,
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  {d}d
-                </button>
-              ))}
-              <input
-                type="number"
-                value={restingDays}
-                onChange={(e) => setRestingDays(Math.max(1, Math.min(60, Number(e.target.value) || 14)))}
-                min={1}
-                max={60}
-                style={{ width: 40, padding: "4px 6px", border: "1px solid var(--accent)", borderRadius: 4, fontSize: 11, textAlign: "center", fontWeight: 600 }}
-              />
-              <span style={{ fontSize: 11, color: "var(--accent-dark)" }}>days</span>
+          <div style={{ marginTop: 10, padding: "12px 14px", background: "var(--accent-light)", borderRadius: 8, border: "1px solid var(--accent)" }}>
+            {/* Smart suggestion header */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+              <span style={{ fontSize: 14 }}>💡</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-dark)" }}>
+                Suggested: {degasPrediction.days} days
+              </span>
+              <span style={{ fontSize: 10, color: "var(--muted)", marginLeft: "auto", textTransform: "capitalize" }}>
+                {degasPrediction.confidence} confidence
+              </span>
+            </div>
+            {/* Rationale */}
+            {degasPrediction.rationale.length > 0 && (
+              <div style={{ fontSize: 10, color: "var(--accent-dark)", marginBottom: 10, lineHeight: 1.5 }}>
+                {degasPrediction.rationale.map((r, i) => (
+                  <div key={i}>• {r}</div>
+                ))}
+              </div>
+            )}
+            {/* Rest duration selector */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--accent-dark)" }}>Rest for</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {[7, degasPrediction.days, 14, 21].filter((d, i, arr) => arr.indexOf(d) === i).sort((a, b) => a - b).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setRestingDays(d); }}
+                    style={{
+                      padding: "6px 12px",
+                      background: restingDays === d ? "var(--accent)" : "#fff",
+                      color: restingDays === d ? "#fff" : "var(--accent-dark)",
+                      border: `1.5px solid ${restingDays === d ? "var(--accent)" : "var(--accent)"}`,
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      position: "relative",
+                    }}
+                  >
+                    {d}d{d === degasPrediction.days && restingDays === d && " ✓"}
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  value={restingDays}
+                  onChange={(e) => setRestingDays(Math.max(1, Math.min(60, Number(e.target.value) || degasPrediction.days)))}
+                  min={1}
+                  max={60}
+                  style={{ width: 40, padding: "4px 6px", border: "1px solid var(--accent)", borderRadius: 4, fontSize: 11, textAlign: "center", fontWeight: 600 }}
+                />
+                <span style={{ fontSize: 11, color: "var(--accent-dark)" }}>days</span>
+              </div>
             </div>
           </div>
         )}
@@ -1064,7 +1099,7 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
         </div>
       )}
       <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-        <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit({ ...f, wholeBag, status: addAs, restingDays, dosesPerPortion, _duplicateMatch: duplicateMatch }); }}
+        <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit({ ...f, wholeBag, status: addAs, targetRestDays: restingDays, dosesPerPortion, _duplicateMatch: duplicateMatch }); }}
           style={{ flex: 1, padding: "9px 0", background: f.name && grams > 0 ? (addAs === 'resting' ? "var(--accent)" : "var(--accent-dark)") : "var(--border)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>
           {addAs === 'resting' ? "Start Resting" : "Add to Freezer"}
         </button>
@@ -1110,11 +1145,14 @@ function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChang
   const addedAt = new Date(coffee.addedAt);
   const referenceDate = roastDate || addedAt;
   const daysSinceRoast = Math.floor((now - referenceDate.getTime()) / 86400000);
-  const daysUntilFreeze = Math.max(0, 14 - daysSinceRoast);
-  const isReadyToFreeze = daysUntilFreeze <= 0;
-  const progress = Math.min(100, Math.round((daysSinceRoast / 14) * 100));
 
-  const freezeDate = new Date(referenceDate.getTime() + 14 * 86400000);
+  // Use targetRestDays if set, otherwise default to 14
+  const targetDays = coffee.targetRestDays || 14;
+  const daysUntilFreeze = Math.max(0, targetDays - daysSinceRoast);
+  const isReadyToFreeze = daysUntilFreeze <= 0;
+  const progress = Math.min(100, Math.round((daysSinceRoast / targetDays) * 100));
+
+  const freezeDate = new Date(referenceDate.getTime() + targetDays * 86400000);
 
   return (
     <div
@@ -1146,7 +1184,7 @@ function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChang
           {isReadyToFreeze ? (
             <div style={{ fontSize: 12, fontWeight: 700, color: "var(--success)" }}>Ready to freeze!</div>
           ) : (
-            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Day {daysSinceRoast} of 14</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Day {daysSinceRoast} of {targetDays}</div>
           )}
         </div>
       </div>
@@ -1156,7 +1194,7 @@ function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChang
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
           <span style={{ fontSize: 14 }}>○</span>
           <span style={{ fontSize: 11, fontWeight: 600, color: isReadyToFreeze ? "var(--success)" : "var(--muted)" }}>
-            {isReadyToFreeze ? "Ready to freeze!" : `Resting · Day ${daysSinceRoast} of 14`}
+            {isReadyToFreeze ? "Ready to freeze!" : `Resting · Day ${daysSinceRoast} of ${targetDays}`}
           </span>
         </div>
 
@@ -1235,7 +1273,7 @@ function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChang
 // ─── Main ───
 export default function Home() {
   const { user, signOut } = useAuth();
-  const { coffees, loading: coffeesLoading, addCoffee: addCoffeeToDb, updateCoffee: updateCoffeeInDb, moveToFreezer, archiveCoffee: archiveCoffeeInDb, deleteCoffee: deleteCoffeeFromDb, uploadLabelImage } = useCoffees();
+  const { coffees, loading: coffeesLoading, addCoffee: addCoffeeToDb, updateCoffee: updateCoffeeInDb, moveToFreezer, archiveCoffee: archiveCoffeeInDb, deleteCoffee: deleteCoffeeFromDb, uploadLabelImage, migrateRestingCoffees } = useCoffees();
   const { baselineGrind, baselineGrindInput, setBaselineGrind, doseG, setDoseG, loading: settingsLoading } = useSettings();
   const loaded = !coffeesLoading && !settingsLoading;
   const [showSettings, setShowSettings] = useState(false);
@@ -1248,6 +1286,8 @@ export default function Home() {
   const [view, setView] = useState("overview");
   const [expanded, setExpanded] = useState(null);
   const [freezerSort, setFreezerSort] = useState("longest");
+  const [migrating, setMigrating] = useState(false);
+  const [migrationResult, setMigrationResult] = useState(null);
   const fileRef = useRef(null);
 
   // Duplicate detection state
@@ -1277,6 +1317,7 @@ export default function Home() {
 
   const activeCoffees = useMemo(() => coffees.filter((c) => c.status === "active").sort((a, b) => new Date(a.pulledAt) - new Date(b.pulledAt)), [coffees]);
   const restingCoffees = useMemo(() => coffees.filter((c) => c.status === "resting").sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)), [coffees]);
+  const restingNeedsMigration = useMemo(() => restingCoffees.filter(c => !c.targetRestDays).length, [restingCoffees]);
   const frozen = useMemo(() => coffees.filter((c) => c.status === "frozen").sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt)), [coffees]);
   const archive = useMemo(() => coffees.filter((c) => c.status === "done").sort((a, b) => new Date(b.finishedAt || b.addedAt) - new Date(a.finishedAt || a.addedAt)), [coffees]);
   // Include remaining portions from active coffees in freezer totals
@@ -1841,6 +1882,58 @@ export default function Home() {
           {view === "resting" && (
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--accent)", marginBottom: 10 }}>○ Resting — {restingCoffees.length} bag{restingCoffees.length !== 1 ? "s" : ""}</div>
+
+              {/* Migration banner for coffees without smart degas */}
+              {restingNeedsMigration > 0 && !migrationResult && (
+                <div style={{ marginBottom: 12, padding: "12px 14px", background: "var(--accent-light)", border: "1px solid var(--accent)", borderRadius: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 14 }}>💡</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--accent-dark)" }}>
+                      Smart degas available for {restingNeedsMigration} coffee{restingNeedsMigration !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--accent-dark)", marginBottom: 10, lineHeight: 1.5 }}>
+                    Update rest periods based on roast level, process, and altitude for more accurate degassing.
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setMigrating(true);
+                      const result = await migrateRestingCoffees();
+                      setMigrationResult(result);
+                      setMigrating(false);
+                    }}
+                    disabled={migrating}
+                    style={{
+                      padding: "8px 16px",
+                      background: migrating ? "var(--muted)" : "var(--accent)",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: migrating ? "wait" : "pointer",
+                    }}
+                  >
+                    {migrating ? "Updating..." : "Update Rest Periods"}
+                  </button>
+                </div>
+              )}
+
+              {/* Migration success message */}
+              {migrationResult && (
+                <div style={{ marginBottom: 12, padding: "12px 14px", background: "#E8F5E9", border: "1px solid var(--success)", borderRadius: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--success)" }}>
+                      ✓ Updated {migrationResult.updated} coffee{migrationResult.updated !== 1 ? "s" : ""} with smart degas periods
+                    </span>
+                    <button
+                      onClick={() => setMigrationResult(null)}
+                      style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 16 }}
+                    >×</button>
+                  </div>
+                </div>
+              )}
+
               {restingCoffees.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", fontSize: 13 }}>
                   No coffees resting.<br />

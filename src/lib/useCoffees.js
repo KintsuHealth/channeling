@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getSupabase, fromDbFormat, toDbFormat } from './supabase';
 import { useAuth } from './useAuth';
+import { calculateDegasDays } from './degasPredictor';
 
 export function useCoffees() {
   const { user } = useAuth();
@@ -166,6 +167,7 @@ export function useCoffees() {
       const dbUpdates = {
         status: 'frozen',
         frozen_at: now.toISOString(),
+        days_rested: daysRested,
       };
 
       console.log("moveToFreezer: Updating coffee", id, "with:", dbUpdates);
@@ -287,6 +289,50 @@ export function useCoffees() {
     return { imported, errors };
   }, [user, addCoffee, uploadLabelImage]);
 
+  // Migration: Update resting coffees without targetRestDays
+  const migrateRestingCoffees = useCallback(async () => {
+    if (!user) return { updated: 0, errors: [] };
+
+    const supabase = getSupabase();
+    if (!supabase) return { updated: 0, errors: [] };
+
+    const errors = [];
+    let updated = 0;
+
+    // Find resting coffees without targetRestDays
+    const restingWithoutTarget = coffees.filter(
+      c => c.status === 'resting' && !c.targetRestDays
+    );
+
+    for (const coffee of restingWithoutTarget) {
+      try {
+        const prediction = calculateDegasDays(coffee);
+        const dbUpdates = { target_rest_days: prediction.days };
+
+        const { error: updateError } = await supabase
+          .from('coffees')
+          .update(dbUpdates)
+          .eq('id', coffee.id)
+          .eq('user_id', user.id);
+
+        if (updateError) {
+          errors.push({ coffee: coffee.name, error: updateError.message });
+          continue;
+        }
+
+        // Update local state
+        setCoffees(prev => prev.map(c =>
+          c.id === coffee.id ? { ...c, targetRestDays: prediction.days } : c
+        ));
+        updated++;
+      } catch (err) {
+        errors.push({ coffee: coffee.name, error: err.message });
+      }
+    }
+
+    return { updated, total: restingWithoutTarget.length, errors };
+  }, [user, coffees]);
+
   return {
     coffees,
     setCoffees,
@@ -299,5 +345,6 @@ export function useCoffees() {
     deleteCoffee,
     uploadLabelImage,
     importCoffees,
+    migrateRestingCoffees,
   };
 }

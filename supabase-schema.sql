@@ -42,6 +42,7 @@ CREATE TABLE public.coffees (
   finished_at TIMESTAMPTZ,
   rested_at TIMESTAMPTZ,
   days_rested INTEGER,
+  target_rest_days INTEGER,
   espresso JSONB,
   favorite BOOLEAN DEFAULT FALSE,
   rating INTEGER DEFAULT 0,

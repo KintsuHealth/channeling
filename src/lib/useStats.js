@@ -62,14 +62,16 @@ export function useStats(coffees) {
       const referenceDate = roastDate || addedAt;
       const daysSinceRoast = Math.floor((now - referenceDate.getTime()) / 86400000);
 
-      // 14-day rest period
-      const daysUntilFreeze = 14 - daysSinceRoast;
+      // Use targetRestDays if set, otherwise default to 14
+      const targetDays = c.targetRestDays || 14;
+      const daysUntilFreeze = targetDays - daysSinceRoast;
       const isReadyToFreeze = daysUntilFreeze <= 0;
-      const progress = Math.min(100, Math.round((daysSinceRoast / 14) * 100));
+      const progress = Math.min(100, Math.round((daysSinceRoast / targetDays) * 100));
 
       return {
         ...c,
         daysSinceRoast,
+        targetDays,
         daysUntilFreeze: Math.max(0, daysUntilFreeze),
         isReadyToFreeze,
         progress,
