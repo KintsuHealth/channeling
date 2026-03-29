@@ -99,15 +99,11 @@ export function AuthWrapper({ children }) {
         boxShadow: '0 4px 24px rgba(92,45,14,0.08)',
       }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <h1 style={{
-            fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: 32,
-            fontWeight: 800,
-            color: 'var(--accent-dark)',
-            margin: '0 0 4px',
-          }}>
-            Expertso
-          </h1>
+          <img
+            src="https://txoekzciwkstblucxhah.supabase.co/storage/v1/object/public/Logo/Expertso%20logo.png"
+            alt="Expertso"
+            style={{ height: 48, marginBottom: 8 }}
+          />
           <p style={{
             fontSize: 13,
             color: 'var(--muted)',

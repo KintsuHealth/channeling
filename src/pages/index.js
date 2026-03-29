@@ -1582,7 +1582,7 @@ export default function Home() {
         {/* Header */}
         <div style={{ padding: "24px 20px 14px", background: "var(--card)", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-            <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 26, fontWeight: 800, margin: 0, color: "var(--accent-dark)" }}>Expertso</h1>
+            <img src="https://txoekzciwkstblucxhah.supabase.co/storage/v1/object/public/Logo/Expertso%20logo.png" alt="Expertso" style={{ height: 32 }} />
             <button onClick={() => setShowSettings(!showSettings)} style={{ background: "none", border: "none", fontSize: 18, color: showSettings ? "var(--accent)" : "var(--muted)", cursor: "pointer", padding: 4, position: "absolute", right: 0 }}>○</button>
           </div>
           <div style={{ marginTop: 5, fontSize: 11, color: "var(--muted)" }}>
