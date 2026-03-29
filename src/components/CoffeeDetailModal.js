@@ -110,7 +110,7 @@ const STATUS_LABELS = {
   done: { label: "Archived", color: "var(--done)", icon: "✓" },
 };
 
-export function CoffeeDetailModal({ coffee, onClose, onEdit }) {
+export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive }) {
   if (!coffee) return null;
 
   const status = STATUS_LABELS[coffee.status] || STATUS_LABELS.frozen;
@@ -371,6 +371,24 @@ export function CoffeeDetailModal({ coffee, onClose, onEdit }) {
               }}
             >
               Edit
+            </button>
+          )}
+          {onArchive && coffee.status !== 'done' && (
+            <button
+              onClick={() => { onArchive(coffee.id); onClose(); }}
+              style={{
+                flex: 1,
+                padding: "14px",
+                background: "var(--done)",
+                border: "none",
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              Archive
             </button>
           )}
         </div>

@@ -1667,6 +1667,7 @@ export default function Home() {
           coffee={viewingCoffee}
           onClose={() => setViewingCoffee(null)}
           onEdit={(c) => { setViewingCoffee(null); setEditingCoffee(c); }}
+          onArchive={(id) => { archiveCoffee(id); setViewingCoffee(null); }}
         />
       )}
     </>
