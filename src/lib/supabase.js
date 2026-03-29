@@ -35,7 +35,6 @@ export const fieldMap = {
     frozenAt: 'frozen_at',
     pulledAt: 'pulled_at',
     finishedAt: 'finished_at',
-    restedAt: 'rested_at',
     grindOffsetPrediction: 'grind_offset_prediction',
     grindOffsetRationale: 'grind_offset_rationale',
     grindConfidence: 'grind_confidence',
@@ -59,7 +58,6 @@ export const fieldMap = {
     frozen_at: 'frozenAt',
     pulled_at: 'pulledAt',
     finished_at: 'finishedAt',
-    rested_at: 'restedAt',
     grind_offset_prediction: 'grindOffsetPrediction',
     grind_offset_rationale: 'grindOffsetRationale',
     grind_confidence: 'grindConfidence',
@@ -75,7 +73,7 @@ const validCoffeeColumns = new Set([
   'roast_level', 'process', 'altitude', 'altitude_category', 'weight', 'price',
   'tasting_notes', 'roast_date', 'bag_color', 'text_color', 'label_image_url',
   'status', 'grams_total', 'portions', 'portion_index', 'doses_used', 'dose_g',
-  'added_at', 'frozen_at', 'pulled_at', 'finished_at', 'rested_at',
+  'added_at', 'frozen_at', 'pulled_at', 'finished_at',
   'espresso', 'favorite', 'rating', 'grind_offset_prediction', 'grind_offset_rationale',
   'grind_confidence'
 ]);

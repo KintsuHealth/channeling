@@ -166,7 +166,6 @@ export function useCoffees() {
       const dbUpdates = {
         status: 'frozen',
         frozen_at: now.toISOString(),
-        rested_at: now.toISOString(),
       };
 
       console.log("moveToFreezer: Updating coffee", id, "with:", dbUpdates);
@@ -185,12 +184,11 @@ export function useCoffees() {
 
       console.log("moveToFreezer: Success! Updating local state.");
 
-      // Update local state (daysRested is calculated, not stored in DB)
+      // Update local state
       setCoffees(prev => prev.map(c => c.id === id ? {
         ...c,
         status: 'frozen',
         frozenAt: now.toISOString(),
-        restedAt: now.toISOString(),
       } : c));
     } catch (err) {
       console.error("moveToFreezer: Exception:", err);
