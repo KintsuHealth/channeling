@@ -1580,13 +1580,10 @@ export default function Home() {
 
       <div style={{ minHeight: "100vh", paddingBottom: 80 }}>
         {/* Header */}
-        <div style={{ padding: "24px 20px 14px", background: "var(--card)", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ padding: "20px 20px 16px", background: "var(--card)", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-            <img src="https://txoekzciwkstblucxhah.supabase.co/storage/v1/object/public/Logo/Expertso%20logo.png" alt="Expertso" style={{ height: 32 }} />
+            <img src="https://txoekzciwkstblucxhah.supabase.co/storage/v1/object/public/Logo/Expertso%20logo.png" alt="Expertso" style={{ height: 56 }} />
             <button onClick={() => setShowSettings(!showSettings)} style={{ background: "none", border: "none", fontSize: 18, color: showSettings ? "var(--accent)" : "var(--muted)", cursor: "pointer", padding: 4, position: "absolute", right: 0 }}>○</button>
-          </div>
-          <div style={{ marginTop: 5, fontSize: 11, color: "var(--muted)" }}>
-            {totalFrozenGrams > 0 ? `${totalFrozenGrams}g · ${totalFrozenDoses} doses · ${totalFrozenPortions} portion${totalFrozenPortions !== 1 ? "s" : ""} in freezer` : activeCoffees.length > 0 ? "Freezer empty — active bag only" : "No coffee tracked yet"}
           </div>
           {showSettings && (
             <div style={{ marginTop: 12, padding: "12px 14px", background: "#FAF7F4", borderRadius: 8, border: "1px solid var(--border)" }}>
@@ -1612,6 +1609,11 @@ export default function Home() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Freezer Stats Bar */}
+        <div style={{ padding: "8px 20px", background: "var(--bg)", borderBottom: "1px solid var(--border)", textAlign: "center", fontSize: 11, color: "var(--muted)" }}>
+          {totalFrozenGrams > 0 ? `${totalFrozenGrams}g · ${totalFrozenDoses} doses · ${totalFrozenPortions} portion${totalFrozenPortions !== 1 ? "s" : ""} in freezer` : activeCoffees.length > 0 ? "Freezer empty — active bag only" : "No coffee tracked yet"}
         </div>
 
         <div style={{ maxWidth: 540, margin: "0 auto", padding: "16px 16px 0" }}>
