@@ -99,15 +99,14 @@ export function AuthWrapper({ children }) {
         boxShadow: '0 4px 24px rgba(92,45,14,0.08)',
       }}>
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <span style={{ fontSize: 40 }}>●</span>
           <h1 style={{
             fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: 26,
-            fontWeight: 700,
+            fontSize: 32,
+            fontWeight: 800,
             color: 'var(--accent-dark)',
-            margin: '8px 0 4px',
+            margin: '0 0 4px',
           }}>
-            Channeling
+            Expertso
           </h1>
           <p style={{
             fontSize: 13,

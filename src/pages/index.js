@@ -1553,7 +1553,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Channeling</title>
+        <title>Expertso</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
         <meta name="description" content="Coffee inventory tracker" />
 
@@ -1565,7 +1565,7 @@ export default function Home() {
         {/* iOS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Channeling" />
+        <meta name="apple-mobile-web-app-title" content="Expertso" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
 
         {/* Favicon */}
@@ -1581,12 +1581,9 @@ export default function Home() {
       <div style={{ minHeight: "100vh", paddingBottom: 80 }}>
         {/* Header */}
         <div style={{ padding: "24px 20px 14px", background: "var(--card)", borderBottom: "1px solid var(--border)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span style={{ fontSize: 18 }}>●</span>
-              <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, margin: 0, color: "var(--accent-dark)" }}>Channeling</h1>
-            </div>
-            <button onClick={() => setShowSettings(!showSettings)} style={{ background: "none", border: "none", fontSize: 18, color: showSettings ? "var(--accent)" : "var(--muted)", cursor: "pointer", padding: 4 }}>○</button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+            <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 26, fontWeight: 800, margin: 0, color: "var(--accent-dark)" }}>Expertso</h1>
+            <button onClick={() => setShowSettings(!showSettings)} style={{ background: "none", border: "none", fontSize: 18, color: showSettings ? "var(--accent)" : "var(--muted)", cursor: "pointer", padding: 4, position: "absolute", right: 0 }}>○</button>
           </div>
           <div style={{ marginTop: 5, fontSize: 11, color: "var(--muted)" }}>
             {totalFrozenGrams > 0 ? `${totalFrozenGrams}g · ${totalFrozenDoses} doses · ${totalFrozenPortions} portion${totalFrozenPortions !== 1 ? "s" : ""} in freezer` : activeCoffees.length > 0 ? "Freezer empty — active bag only" : "No coffee tracked yet"}

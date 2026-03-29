@@ -612,7 +612,7 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
         color: "var(--muted)",
       }}>
         <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>●</div>
-        <div style={{ fontSize: 15, marginBottom: 8 }}>Welcome to Channeling</div>
+        <div style={{ fontSize: 15, marginBottom: 8 }}>Welcome to Expertso</div>
         <div style={{ fontSize: 13, lineHeight: 1.6 }}>
           Start by scanning or adding your first coffee bag.<br />
           Your stats will appear here.
