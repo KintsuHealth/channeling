@@ -1,8 +1,9 @@
 export const DEFAULT_DOSE_G = 18;
+export const DEFAULT_DOSES_PER_PORTION = 5;
 const PDMIN = 5; // min doses per portion
 const PDMAX = 7; // max doses per portion
 
-export function optimizePortions(totalGrams, doseG = DEFAULT_DOSE_G) {
+export function optimizePortions(totalGrams, doseG = DEFAULT_DOSE_G, targetDosesPerPortion = null) {
   // Ensure valid inputs
   if (!totalGrams || totalGrams <= 0) return { portions: [], summary: "No weight", doseG };
   if (!doseG || doseG < 10 || doseG > 30) doseG = DEFAULT_DOSE_G; // Sanity check dose size
@@ -13,6 +14,28 @@ export function optimizePortions(totalGrams, doseG = DEFAULT_DOSE_G) {
   if (totalDoses === 0)
     return { portions: [{ grams: totalGrams, doses: 0, buffer: totalGrams }], summary: `${totalGrams}g — less than one dose`, doseG };
 
+  // If user specified a target doses per portion, use fixed-size portioning
+  if (targetDosesPerPortion && targetDosesPerPortion > 0) {
+    const numPortions = Math.ceil(totalDoses / targetDosesPerPortion);
+    const dpp = [];
+    let remaining = totalDoses;
+    for (let i = 0; i < numPortions; i++) {
+      const doses = Math.min(targetDosesPerPortion, remaining);
+      dpp.push(doses);
+      remaining -= doses;
+    }
+
+    const baseBuffer = Math.floor(remainderG / numPortions);
+    const extraBufferUnits = remainderG - baseBuffer * numPortions;
+    const portions = dpp.map((d, i) => {
+      const buf = baseBuffer + (i < extraBufferUnits ? 1 : 0);
+      return { grams: d * doseG + buf, doses: d, buffer: buf };
+    });
+    const avgBuf = (remainderG / numPortions).toFixed(1);
+    return { portions, summary: `${numPortions} portions · ${totalDoses} doses · ~${avgBuf}g buffer each`, doseG };
+  }
+
+  // Default optimization: target 5-7 doses per portion
   if (totalDoses <= PDMAX) {
     return {
       portions: [{ grams: totalGrams, doses: totalDoses, buffer: +remainderG.toFixed(1) }],

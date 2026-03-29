@@ -4,7 +4,7 @@ import { useCoffees } from "@/lib/useCoffees";
 import { useSettings } from "@/lib/useSettings";
 import { useAuth } from "@/lib/useAuth";
 import { DataMigration } from "@/components/DataMigration";
-import { optimizePortions, parseGrams, DEFAULT_DOSE_G } from "@/lib/portions";
+import { optimizePortions, parseGrams, DEFAULT_DOSE_G, DEFAULT_DOSES_PER_PORTION } from "@/lib/portions";
 import { useStats } from "@/lib/useStats";
 import Overview from "@/components/Overview";
 import { EditCoffeeModal } from "@/components/EditCoffeeModal";
@@ -628,6 +628,59 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
   };
   const [addAs, setAddAs] = useState(getDefaultAddAs);
 
+  // Resting duration (editable, default 14 days)
+  const [restingDays, setRestingDays] = useState(14);
+
+  // Doses per portion selector
+  const [dosesPerPortion, setDosesPerPortion] = useState(DEFAULT_DOSES_PER_PORTION);
+  const [customDoses, setCustomDoses] = useState(false);
+
+  // AI suggestion state
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestions, setSuggestions] = useState(null);
+  const [suggestError, setSuggestError] = useState(null);
+  const needsSuggestions = !f.region || !f.altitude;
+
+  const fetchSuggestions = async () => {
+    setSuggesting(true);
+    setSuggestError(null);
+    setSuggestions(null);
+    try {
+      const res = await fetch("/api/suggest-details", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(f),
+      });
+      if (!res.ok) throw new Error("Failed to get suggestions");
+      const data = await res.json();
+      if (data.suggestions && Object.keys(data.suggestions).length > 0) {
+        const validSuggestions = {};
+        for (const [key, value] of Object.entries(data.suggestions)) {
+          if (value !== null) validSuggestions[key] = value;
+        }
+        if (Object.keys(validSuggestions).length > 0) {
+          setSuggestions({ ...data, suggestions: validSuggestions });
+        } else {
+          setSuggestError("Could not determine suggestions with available data");
+        }
+      } else {
+        setSuggestError(data.notes || "No suggestions available");
+      }
+    } catch (err) {
+      setSuggestError(err.message);
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  const applySuggestions = () => {
+    if (!suggestions?.suggestions) return;
+    const updated = { ...f, ...suggestions.suggestions };
+    setF(updated);
+    onChange(updated);
+    setSuggestions(null);
+  };
+
   // Duplicate detection
   const [duplicateMatch, setDuplicateMatch] = useState(null);
   useEffect(() => {
@@ -647,7 +700,7 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
   const grams = parseGrams(f.weight);
   const plan = wholeBag
     ? { portions: [{ grams, doses: Math.floor(grams / doseG), buffer: grams % doseG }], summary: `1 whole bag · ${Math.floor(grams / doseG)} doses` }
-    : optimizePortions(grams, doseG);
+    : optimizePortions(grams, doseG, dosesPerPortion);
 
   // Check if scanned weight matches a common weight
   const scannedGrams = parseGrams(data.weight);
@@ -729,6 +782,45 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
           )}
         </div>
       </div>
+      {/* AI Suggestions for missing fields */}
+      {needsSuggestions && (
+        <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--accent-light)", border: "1px solid var(--accent)", borderRadius: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: suggestions ? 8 : 0 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--accent-dark)" }}>
+              {!f.region && !f.altitude ? "Missing region & altitude" : !f.region ? "Missing region" : "Missing altitude"}
+            </span>
+            <button
+              type="button"
+              onClick={fetchSuggestions}
+              disabled={suggesting}
+              style={{ padding: "5px 12px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: suggesting ? "wait" : "pointer", opacity: suggesting ? 0.7 : 1 }}
+            >
+              {suggesting ? "Looking up..." : "✨ Suggest"}
+            </button>
+          </div>
+          {suggestError && <div style={{ fontSize: 11, color: "var(--error)", marginTop: 6 }}>{suggestError}</div>}
+          {suggestions && (
+            <div style={{ marginTop: 8, padding: "8px 10px", background: "#fff", borderRadius: 6 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: "var(--success)", marginBottom: 4 }}>
+                {suggestions.confidence} confidence
+              </div>
+              {Object.entries(suggestions.suggestions).map(([key, value]) => (
+                <div key={key} style={{ fontSize: 12, marginBottom: 2 }}>
+                  <strong style={{ textTransform: "capitalize" }}>{key}:</strong> {value}
+                </div>
+              ))}
+              {suggestions.notes && <div style={{ fontSize: 10, color: "var(--muted)", fontStyle: "italic", marginTop: 4 }}>{suggestions.notes}</div>}
+              <button
+                type="button"
+                onClick={applySuggestions}
+                style={{ marginTop: 6, padding: "5px 12px", background: "var(--success)", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+              >
+                Apply
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {/* Storage method toggle */}
       <div style={{ marginTop: 12 }}>
         <label style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 6 }}>Storage Method</label>
@@ -773,6 +865,63 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
           </button>
         </div>
       </div>
+      {/* Doses per portion selector - only show when portioning */}
+      {!wholeBag && (
+        <div style={{ marginTop: 12 }}>
+          <label style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 6 }}>Doses per Portion</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[3, 5, 7].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => { setDosesPerPortion(d); setCustomDoses(false); }}
+                style={{
+                  padding: "8px 16px",
+                  background: dosesPerPortion === d && !customDoses ? "var(--ice)" : "#fff",
+                  color: dosesPerPortion === d && !customDoses ? "#fff" : "var(--text)",
+                  border: `1.5px solid ${dosesPerPortion === d && !customDoses ? "var(--ice)" : "var(--border)"}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {d}
+              </button>
+            ))}
+            {customDoses ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="number"
+                  value={dosesPerPortion}
+                  onChange={(e) => setDosesPerPortion(Math.max(1, Math.min(20, Number(e.target.value) || 5)))}
+                  min={1}
+                  max={20}
+                  style={{ width: 50, padding: "6px 8px", border: "1.5px solid var(--ice)", borderRadius: 6, fontSize: 13, textAlign: "center", fontWeight: 600 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => { setCustomDoses(false); setDosesPerPortion(5); }}
+                  style={{ padding: "6px 10px", background: "none", border: "1px solid var(--border)", borderRadius: 5, fontSize: 11, color: "var(--muted)", cursor: "pointer" }}
+                >
+                  Presets
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCustomDoses(true)}
+                style={{ padding: "8px 12px", background: "none", border: "1px dashed var(--border)", borderRadius: 6, fontSize: 12, color: "var(--muted)", cursor: "pointer" }}
+              >
+                Custom
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+            {grams > 0 ? `≈ ${Math.ceil(Math.floor(grams / doseG) / dosesPerPortion)} portions` : ""}
+          </div>
+        </div>
+      )}
       {/* Add As toggle - Resting vs Freezer */}
       <div style={{ marginTop: 12 }}>
         <label style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 6 }}>Add As</label>
@@ -816,6 +965,42 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
             <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>Ready to freeze</div>
           </button>
         </div>
+        {/* Resting duration selector - only show when resting selected */}
+        {addAs === 'resting' && (
+          <div style={{ marginTop: 10, padding: "10px 12px", background: "var(--accent-light)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--accent-dark)" }}>Rest for</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {[7, 14, 21].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setRestingDays(d)}
+                  style={{
+                    padding: "4px 10px",
+                    background: restingDays === d ? "var(--accent)" : "#fff",
+                    color: restingDays === d ? "#fff" : "var(--accent-dark)",
+                    border: `1px solid ${restingDays === d ? "var(--accent)" : "var(--accent)"}`,
+                    borderRadius: 4,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  {d}d
+                </button>
+              ))}
+              <input
+                type="number"
+                value={restingDays}
+                onChange={(e) => setRestingDays(Math.max(1, Math.min(60, Number(e.target.value) || 14)))}
+                min={1}
+                max={60}
+                style={{ width: 40, padding: "4px 6px", border: "1px solid var(--accent)", borderRadius: 4, fontSize: 11, textAlign: "center", fontWeight: 600 }}
+              />
+              <span style={{ fontSize: 11, color: "var(--accent-dark)" }}>days</span>
+            </div>
+          </div>
+        )}
       </div>
       {/* Altitude selector */}
       <div style={{ marginTop: 12 }}>
@@ -842,9 +1027,9 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
       {/* Grind Prediction */}
       <GrindPredictionCard coffee={f} baseline={baseline} allCoffees={allCoffees} />
       {grams > 0 && <PortionPlanPreview plan={plan} wholeBag={wholeBag} />}
-      {f.roastDate && (() => {
+      {f.roastDate && addAs === 'resting' && (() => {
         const roast = new Date(f.roastDate);
-        const freezeDate = new Date(roast.getTime() + 14 * 86400000);
+        const freezeDate = new Date(roast.getTime() + restingDays * 86400000);
         const today = new Date();
         const daysUntilFreeze = Math.ceil((freezeDate - today) / 86400000);
         if (daysUntilFreeze > 0) {
@@ -857,6 +1042,11 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
           </div>;
         }
       })()}
+      {addAs === 'frozen' && (
+        <div style={{ marginTop: 12, padding: "8px 12px", background: "#E8F5E9", border: "1px solid var(--success)", borderRadius: 6, fontSize: 11, color: "var(--success)" }}>
+          ✓ Will be portioned and frozen immediately
+        </div>
+      )}
       {/* Duplicate warning banner */}
       {duplicateMatch && (
         <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 8, fontSize: 12 }}>
@@ -870,7 +1060,7 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
         </div>
       )}
       <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-        <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit({ ...f, wholeBag, status: addAs, _duplicateMatch: duplicateMatch }); }}
+        <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit({ ...f, wholeBag, status: addAs, restingDays, dosesPerPortion, _duplicateMatch: duplicateMatch }); }}
           style={{ flex: 1, padding: "9px 0", background: f.name && grams > 0 ? (addAs === 'resting' ? "var(--accent)" : "var(--accent-dark)") : "var(--border)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>
           {addAs === 'resting' ? "Start Resting" : "Add to Freezer"}
         </button>
@@ -1175,9 +1365,10 @@ export default function Home() {
   const addCoffee = async (data, rating) => {
     const grams = parseGrams(data.weight);
     const effectiveDoseG = doseG || DEFAULT_DOSE_G;
+    const effectiveDosesPerPortion = data.dosesPerPortion || DEFAULT_DOSES_PER_PORTION;
     const plan = data.wholeBag
       ? { portions: [{ grams, doses: Math.floor(grams / effectiveDoseG), buffer: grams % effectiveDoseG }] }
-      : optimizePortions(grams, effectiveDoseG);
+      : optimizePortions(grams, effectiveDoseG, effectiveDosesPerPortion);
     const prediction = calculateGrindOffset(data);
 
     // Upload label image to storage if present
