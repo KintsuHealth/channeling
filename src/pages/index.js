@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import Head from "next/head";
 import { useCoffees } from "@/lib/useCoffees";
 import { useSettings } from "@/lib/useSettings";
@@ -9,6 +9,9 @@ import { useStats } from "@/lib/useStats";
 import Overview from "@/components/Overview";
 import { EditCoffeeModal } from "@/components/EditCoffeeModal";
 import { CoffeeDetailModal } from "@/components/CoffeeDetailModal";
+import { DuplicateDetectionModal } from "@/components/DuplicateDetectionModal";
+import { getRoastQuarter } from "@/lib/roastBatch";
+import { findDuplicateCoffee, mergePortions } from "@/lib/duplicateDetection";
 import {
   calculateGrindOffset,
   formatOffset,
@@ -625,6 +628,17 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
   };
   const [addAs, setAddAs] = useState(getDefaultAddAs);
 
+  // Duplicate detection
+  const [duplicateMatch, setDuplicateMatch] = useState(null);
+  useEffect(() => {
+    if (f.name && allCoffees?.length) {
+      const result = findDuplicateCoffee(f, allCoffees);
+      setDuplicateMatch(result);
+    } else {
+      setDuplicateMatch(null);
+    }
+  }, [f.name, f.roaster, allCoffees]);
+
   const set = (k, v) => {
     const updated = { ...f, [k]: v };
     setF(updated);
@@ -843,8 +857,20 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
           </div>;
         }
       })()}
+      {/* Duplicate warning banner */}
+      {duplicateMatch && (
+        <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 8, fontSize: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--active)", fontWeight: 600 }}>
+            <span>⚠</span>
+            <span>Similar coffee found: {duplicateMatch.match.name}</span>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+            {duplicateMatch.isSameBatch ? "Same batch detected — you can add portions to existing." : "Different batch — you can copy the existing recipe."}
+          </div>
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-        <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit({ ...f, wholeBag, status: addAs }); }}
+        <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit({ ...f, wholeBag, status: addAs, _duplicateMatch: duplicateMatch }); }}
           style={{ flex: 1, padding: "9px 0", background: f.name && grams > 0 ? (addAs === 'resting' ? "var(--accent)" : "var(--accent-dark)") : "var(--border)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>
           {addAs === 'resting' ? "Start Resting" : "Add to Freezer"}
         </button>
@@ -1030,6 +1056,11 @@ export default function Home() {
   const [freezerSort, setFreezerSort] = useState("longest");
   const fileRef = useRef(null);
 
+  // Duplicate detection state
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [pendingCoffeeData, setPendingCoffeeData] = useState(null);
+  const [duplicateMatch, setDuplicateMatch] = useState(null);
+
   const update = (id, patch) => updateCoffeeInDb(id, patch);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const del = (id) => {
@@ -1194,6 +1225,78 @@ export default function Home() {
 
   const resetScan = () => { setParsed(null); setPreview(null); setManualMode(false); setError(null); };
   const handleDrop = useCallback((e) => { e.preventDefault(); handleFile(e.dataTransfer?.files?.[0]); }, [handleFile]);
+
+  // Duplicate detection handlers
+  const handleSubmitWithDuplicateCheck = (data) => {
+    const { _duplicateMatch, ...coffeeData } = data;
+    if (_duplicateMatch) {
+      // Store pending data and show modal
+      setPendingCoffeeData(coffeeData);
+      setDuplicateMatch(_duplicateMatch);
+      setShowDuplicateModal(true);
+    } else {
+      // No duplicate, add normally
+      addCoffee(coffeeData, 0);
+    }
+  };
+
+  const handleMergePortions = async () => {
+    if (!duplicateMatch || !pendingCoffeeData) return;
+    const existing = duplicateMatch.match;
+    const newGrams = parseGrams(pendingCoffeeData.weight);
+    const effectiveDoseG = doseG || DEFAULT_DOSE_G;
+
+    const merged = mergePortions(existing, newGrams, effectiveDoseG);
+    if (merged) {
+      await updateCoffeeInDb(existing.id, {
+        portions: merged.portions,
+        gramsTotal: merged.gramsTotal,
+        portionIndex: merged.portionIndex,
+        dosesUsed: merged.dosesUsed,
+      });
+    }
+
+    // Reset state
+    setShowDuplicateModal(false);
+    setPendingCoffeeData(null);
+    setDuplicateMatch(null);
+    resetScan();
+    setView("freezer");
+  };
+
+  const handleCopyRecipe = async () => {
+    if (!duplicateMatch || !pendingCoffeeData) return;
+    const existing = duplicateMatch.match;
+
+    // Add new coffee with copied espresso settings
+    await addCoffee({
+      ...pendingCoffeeData,
+      espresso: existing.espresso || null,
+    }, 0);
+
+    // Reset state
+    setShowDuplicateModal(false);
+    setPendingCoffeeData(null);
+    setDuplicateMatch(null);
+  };
+
+  const handleStartFresh = async () => {
+    if (!pendingCoffeeData) return;
+
+    // Add new coffee without any copied data
+    await addCoffee(pendingCoffeeData, 0);
+
+    // Reset state
+    setShowDuplicateModal(false);
+    setPendingCoffeeData(null);
+    setDuplicateMatch(null);
+  };
+
+  const closeDuplicateModal = () => {
+    setShowDuplicateModal(false);
+    setPendingCoffeeData(null);
+    setDuplicateMatch(null);
+  };
   const rp = (c) => c.portions.length - c.portionIndex;
   const rg = (c) => c.portions.slice(c.portionIndex).reduce((s, p) => s + p.grams, 0);
   const curP = (c) => c.portions[c.portionIndex];
@@ -1480,6 +1583,7 @@ export default function Home() {
                         <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ice)" }}>{c.isActiveRemaining ? c.portions.slice(c.portionIndex + 1).reduce((s, p) => s + p.grams, 0) : rg(c)}g</div>
                         <div style={{ fontSize: 10, color: "var(--muted)" }}>{c.isActiveRemaining ? c.portions.length - c.portionIndex - 1 : rp(c)} portion{(c.isActiveRemaining ? c.portions.length - c.portionIndex - 1 : rp(c)) !== 1 ? "s" : ""}</div>
                         {c.isActiveRemaining && <div style={{ fontSize: 10, color: "var(--active)", fontWeight: 600, marginTop: 2 }}>● 1 active</div>}
+                        {c.roastDate && <div style={{ marginTop: 2 }}><span style={{ padding: "2px 6px", background: "var(--accent-light)", borderRadius: 4, fontSize: 10, fontWeight: 600, color: "var(--accent-dark)", fontFamily: "'DM Mono', monospace" }}>{getRoastQuarter(c.roastDate)}</span></div>}
                         <div style={{ fontSize: 10, color: "var(--ice)", fontWeight: 600, marginTop: 2 }}>❄ {fmt(c.addedAt)}</div>
                         <div style={{ fontSize: 9, color: "var(--muted)" }}>{daysAgo(c.addedAt)}</div>
                       </div>
@@ -1602,7 +1706,7 @@ export default function Home() {
 
                 {manualMode && !parsed && <ManualEntry onSubmit={(d) => { setParsed(d); setManualMode(false); }} onCancel={resetScan} />}
 
-                {parsed && <EditableResult data={parsed} onChange={setParsed} onSubmit={(data) => addCoffee(data, 0)} onCancel={resetScan} doseG={doseG} setDoseG={setDoseG} baseline={baselineGrind} allCoffees={coffees} />}
+                {parsed && <EditableResult data={parsed} onChange={setParsed} onSubmit={handleSubmitWithDuplicateCheck} onCancel={resetScan} doseG={doseG} setDoseG={setDoseG} baseline={baselineGrind} allCoffees={coffees} />}
               </div>
               {error && <div style={{ padding: "10px 14px", background: "#FDF0E8", border: "1px solid var(--error)", borderRadius: 7, fontSize: 12, color: "var(--error)", marginBottom: 12, lineHeight: 1.5 }}>{error}</div>}
             </div>
@@ -1668,6 +1772,18 @@ export default function Home() {
           onClose={() => setViewingCoffee(null)}
           onEdit={(c) => { setViewingCoffee(null); setEditingCoffee(c); }}
           onArchive={(id) => { archiveCoffee(id); setViewingCoffee(null); }}
+        />
+      )}
+
+      {/* Duplicate Detection Modal */}
+      {showDuplicateModal && duplicateMatch && (
+        <DuplicateDetectionModal
+          matchedCoffee={duplicateMatch.match}
+          newCoffee={pendingCoffeeData}
+          onAddPortions={handleMergePortions}
+          onCopyRecipe={handleCopyRecipe}
+          onStartFresh={handleStartFresh}
+          onClose={closeDuplicateModal}
         />
       )}
     </>
