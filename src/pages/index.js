@@ -7,6 +7,7 @@ import { DataMigration } from "@/components/DataMigration";
 import { optimizePortions, parseGrams, DEFAULT_DOSE_G } from "@/lib/portions";
 import { useStats } from "@/lib/useStats";
 import Overview from "@/components/Overview";
+import { EditCoffeeModal } from "@/components/EditCoffeeModal";
 import {
   calculateGrindOffset,
   formatOffset,
@@ -882,7 +883,7 @@ function ManualEntry({ onSubmit, onCancel }) {
   );
 }
 
-function RestingCard({ coffee, onMoveToFreezer, onDelete, onRatingChange }) {
+function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChange }) {
   const now = Date.now();
   const roastDate = coffee.roastDate ? new Date(coffee.roastDate) : null;
   const addedAt = new Date(coffee.addedAt);
@@ -979,16 +980,29 @@ function RestingCard({ coffee, onMoveToFreezer, onDelete, onRatingChange }) {
           ❄ Move to Freezer
         </button>
         <button
-          onClick={(e) => { e.stopPropagation(); onDelete(coffee.id); }}
+          onClick={(e) => { e.stopPropagation(); onEdit(coffee); }}
           style={{
             padding: "9px 14px",
             background: "none",
-            border: "1px solid var(--error)",
-            color: "var(--error)",
+            border: "1px solid var(--accent)",
+            color: "var(--accent)",
             borderRadius: 7,
             fontSize: 12,
           }}
-        >✕</button>
+          title="Edit"
+        >✎</button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onArchive(coffee.id); }}
+          style={{
+            padding: "9px 14px",
+            background: "none",
+            border: "1px solid var(--done)",
+            color: "var(--done)",
+            borderRadius: 7,
+            fontSize: 12,
+          }}
+          title="Archive"
+        >✓</button>
       </div>
     </div>
   );
@@ -997,7 +1011,7 @@ function RestingCard({ coffee, onMoveToFreezer, onDelete, onRatingChange }) {
 // ─── Main ───
 export default function Home() {
   const { user, signOut } = useAuth();
-  const { coffees, loading: coffeesLoading, addCoffee: addCoffeeToDb, updateCoffee: updateCoffeeInDb, moveToFreezer, deleteCoffee: deleteCoffeeFromDb, uploadLabelImage } = useCoffees();
+  const { coffees, loading: coffeesLoading, addCoffee: addCoffeeToDb, updateCoffee: updateCoffeeInDb, moveToFreezer, archiveCoffee: archiveCoffeeInDb, deleteCoffee: deleteCoffeeFromDb, uploadLabelImage } = useCoffees();
   const { baselineGrind, baselineGrindInput, setBaselineGrind, doseG, setDoseG, loading: settingsLoading } = useSettings();
   const loaded = !coffeesLoading && !settingsLoading;
   const [showSettings, setShowSettings] = useState(false);
@@ -1018,6 +1032,17 @@ export default function Home() {
     if (window.confirm("Are you sure you want to delete this coffee? This cannot be undone.")) {
       deleteCoffeeFromDb(id);
     }
+  };
+
+  const archiveCoffee = (id) => {
+    archiveCoffeeInDb(id);
+  };
+
+  const [editingCoffee, setEditingCoffee] = useState(null);
+  const handleEditSave = async (data) => {
+    if (!editingCoffee) return;
+    await update(editingCoffee.id, data);
+    setEditingCoffee(null);
   };
 
   const activeCoffees = useMemo(() => coffees.filter((c) => c.status === "active").sort((a, b) => new Date(a.pulledAt) - new Date(b.pulledAt)), [coffees]);
@@ -1308,6 +1333,7 @@ export default function Home() {
                           <button onClick={(e) => { e.stopPropagation(); finishPortion(active); }} style={{ flex: 1, padding: "9px 0", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>
                             {more > 0 ? "Portion done → freezer" : "Bag finished"}
                           </button>
+                          <button onClick={(e) => { e.stopPropagation(); setEditingCoffee(active); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 7, fontSize: 12 }} title="Edit">✎</button>
                           <button onClick={(e) => { e.stopPropagation(); update(active.id, { status: "frozen" }); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--ice)", color: "var(--ice)", borderRadius: 7, fontSize: 12 }} title="Put back in freezer">❄</button>
                           <button onClick={(e) => { e.stopPropagation(); del(active.id); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 7, fontSize: 12 }} title="Delete">✕</button>
                         </div>
@@ -1493,8 +1519,9 @@ export default function Home() {
                         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                           {!c.isActiveRemaining && <button onClick={(e) => { e.stopPropagation(); pull(c.id); }} style={{ flex: 1, padding: "8px 0", background: "var(--ice)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>Pull a portion</button>}
                           {c.isActiveRemaining && <div style={{ flex: 1, padding: "8px 0", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 7, fontSize: 12, fontWeight: 600, textAlign: "center", color: "var(--active)" }}>Finish active portion first</div>}
+                          <button onClick={(e) => { e.stopPropagation(); setEditingCoffee(c); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 7, fontSize: 12 }} title="Edit">✎</button>
                           <button onClick={(e) => { e.stopPropagation(); update(c.id, { favorite: !c.favorite }); }} style={{ padding: "8px 14px", background: "none", border: `1px solid ${c.favorite ? "var(--star)" : "var(--border)"}`, color: c.favorite ? "var(--star)" : "var(--muted)", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>{c.favorite ? "★" : "☆"}</button>
-                          <button onClick={(e) => { e.stopPropagation(); del(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 7, fontSize: 12 }}>✕</button>
+                          <button onClick={(e) => { e.stopPropagation(); archiveCoffee(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--done)", color: "var(--done)", borderRadius: 7, fontSize: 12 }} title="Archive">✓</button>
                         </div>
                       </div>
                     )}
@@ -1519,7 +1546,8 @@ export default function Home() {
                     key={c.id}
                     coffee={c}
                     onMoveToFreezer={moveToFreezer}
-                    onDelete={del}
+                    onEdit={setEditingCoffee}
+                    onArchive={archiveCoffee}
                     onRatingChange={(r) => update(c.id, { rating: r })}
                   />
                 ))
@@ -1612,6 +1640,15 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editingCoffee && (
+        <EditCoffeeModal
+          coffee={editingCoffee}
+          onSave={handleEditSave}
+          onCancel={() => setEditingCoffee(null)}
+        />
+      )}
     </>
   );
 }

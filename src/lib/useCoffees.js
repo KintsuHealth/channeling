@@ -113,21 +113,50 @@ export function useCoffees() {
   const moveToFreezer = useCallback(async (id) => {
     if (!user) return;
 
-    const coffee = coffees.find(c => c.id === id);
-    if (!coffee) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
 
-    const now = new Date();
-    const daysRested = Math.floor((now - new Date(coffee.addedAt)) / 86400000);
+    try {
+      // Fetch fresh data to avoid stale closure
+      const { data: freshCoffee, error: fetchError } = await supabase
+        .from('coffees')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
 
-    const updates = {
-      status: 'frozen',
-      frozenAt: now.toISOString(),
-      restedAt: now.toISOString(),
-      daysRested: daysRested,
-    };
+      if (fetchError || !freshCoffee) {
+        console.error("Failed to fetch coffee:", fetchError);
+        setError("Could not find the coffee to move");
+        return;
+      }
 
-    await updateCoffee(id, updates);
-  }, [user, coffees, updateCoffee]);
+      const coffee = fromDbFormat(freshCoffee);
+      const now = new Date();
+      // Use roastDate if available, otherwise fall back to addedAt
+      const referenceDate = coffee.roastDate
+        ? new Date(coffee.roastDate)
+        : new Date(coffee.addedAt);
+      const daysRested = Math.floor((now - referenceDate) / 86400000);
+
+      await updateCoffee(id, {
+        status: 'frozen',
+        frozenAt: now.toISOString(),
+        restedAt: now.toISOString(),
+        daysRested,
+      });
+    } catch (err) {
+      console.error("Error moving to freezer:", err);
+      setError(err.message);
+    }
+  }, [user, updateCoffee]);
+
+  const archiveCoffee = useCallback(async (id) => {
+    await updateCoffee(id, {
+      status: 'done',
+      finishedAt: new Date().toISOString()
+    });
+  }, [updateCoffee]);
 
   const deleteCoffee = useCallback(async (id) => {
     if (!user) return;
@@ -221,6 +250,7 @@ export function useCoffees() {
     addCoffee,
     updateCoffee,
     moveToFreezer,
+    archiveCoffee,
     deleteCoffee,
     uploadLabelImage,
     importCoffees,
