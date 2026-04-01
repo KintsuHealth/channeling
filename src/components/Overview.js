@@ -284,7 +284,12 @@ function NowBrewing({ coffee, onUseDose, onPull }) {
 
 // ─── Freezer Stats Section ───
 
-function FreezerStats({ grams, portions, doses, daysLeft }) {
+function FreezerStats({ grams, portions, doses }) {
+  // Calculate days at different consumption rates
+  const daysAt1 = doses;
+  const daysAt2 = Math.floor(doses / 2);
+  const daysAt3 = Math.floor(doses / 3);
+
   return (
     <div>
       <SectionHeader icon="❄" title="Freezer Stats" color="var(--ice)" />
@@ -293,17 +298,23 @@ function FreezerStats({ grams, portions, doses, daysLeft }) {
         <StatCard value={portions} label={portions === 1 ? "portion" : "portions"} color="var(--ice)" />
         <StatCard value={doses} label="doses" color="var(--ice)" />
       </div>
-      {daysLeft !== null && (
+      {doses > 0 && (
         <div style={{
-          textAlign: "center",
-          fontSize: 12,
+          fontSize: 11,
           color: "var(--muted)",
-          padding: "8px 0",
+          padding: "10px 12px",
           background: "var(--card)",
           borderRadius: 6,
           border: "1px solid var(--border)",
+          display: "flex",
+          justifyContent: "space-around",
+          gap: 8,
         }}>
-          ~{daysLeft} days of coffee remaining
+          <span>☕ <strong>{daysAt1}d</strong></span>
+          <span style={{ color: "var(--border)" }}>|</span>
+          <span>☕☕ <strong>{daysAt2}d</strong></span>
+          <span style={{ color: "var(--border)" }}>|</span>
+          <span>☕☕☕ <strong>{daysAt3}d</strong></span>
         </div>
       )}
     </div>
@@ -678,7 +689,6 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
           grams={freezerGrams}
           portions={freezerPortions}
           doses={freezerDoses}
-          daysLeft={estimatedDaysLeft}
         />
       )}
 
