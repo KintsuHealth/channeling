@@ -156,18 +156,11 @@ export function useCoffees() {
         return;
       }
 
-      const coffee = fromDbFormat(freshCoffee);
       const now = new Date();
-      // Use roastDate if available, otherwise fall back to addedAt
-      const referenceDate = coffee.roastDate
-        ? new Date(coffee.roastDate)
-        : new Date(coffee.addedAt);
-      const daysRested = Math.floor((now - referenceDate) / 86400000);
 
       const dbUpdates = {
         status: 'frozen',
         frozen_at: now.toISOString(),
-        days_rested: daysRested,
       };
 
       console.log("moveToFreezer: Updating coffee", id, "with:", dbUpdates);
