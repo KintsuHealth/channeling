@@ -1,6 +1,17 @@
 import { useMemo } from "react";
 import { DEFAULT_DOSE_G } from "./portions";
 
+// Normalize string for grouping (lowercase, trim, strip accents)
+function normalizeForGrouping(str) {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 // Calculate effective age for a coffee
 // Formula: daysRested + (daysInFreezer / 30) + daysSincePull
 // 1 month frozen ≈ 1 day of aging
@@ -128,40 +139,57 @@ export function useStats(coffees) {
     const allRated = all.filter((c) => c.rating > 0).sort((a, b) => b.rating - a.rating);
     const topRated = allRated.slice(0, 3);
 
-    // Top roasters by frequency
-    const roasterCounts = {};
+    // Top roasters by frequency (normalized to handle accent variations)
+    const roasterData = {};
     all.forEach((c) => {
       if (c.roaster) {
-        roasterCounts[c.roaster] = (roasterCounts[c.roaster] || 0) + 1;
+        const key = normalizeForGrouping(c.roaster);
+        if (!roasterData[key]) {
+          roasterData[key] = { displayNames: {}, count: 0 };
+        }
+        roasterData[key].count++;
+        roasterData[key].displayNames[c.roaster] = (roasterData[key].displayNames[c.roaster] || 0) + 1;
       }
     });
-    const topRoasters = Object.entries(roasterCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([name, count]) => ({ name, count }));
+    const topRoasters = Object.values(roasterData)
+      .map(data => ({
+        // Use the most common spelling as display name
+        name: Object.entries(data.displayNames).sort((a, b) => b[1] - a[1])[0][0],
+        count: data.count
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
 
-    // Top countries by frequency
-    const countryCounts = {};
+    // Top countries by frequency (normalized to handle variations)
+    const countryData = {};
     all.forEach((c) => {
       if (c.country) {
-        countryCounts[c.country] = (countryCounts[c.country] || 0) + 1;
+        const key = normalizeForGrouping(c.country);
+        if (!countryData[key]) {
+          countryData[key] = { displayNames: {}, count: 0 };
+        }
+        countryData[key].count++;
+        countryData[key].displayNames[c.country] = (countryData[key].displayNames[c.country] || 0) + 1;
       }
     });
-    const topCountries = Object.entries(countryCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([name, count]) => ({ name, count }));
+    const topCountries = Object.values(countryData)
+      .map(data => ({
+        name: Object.entries(data.displayNames).sort((a, b) => b[1] - a[1])[0][0],
+        count: data.count
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
 
     // ─── Origin Breakdown (by country) ───
     const totalBags = all.length;
-    const byCountry = Object.entries(countryCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name, count]) => ({
-        name,
-        count,
-        percent: totalBags > 0 ? Math.round((count / totalBags) * 100) : 0,
-      }));
+    const byCountry = Object.values(countryData)
+      .map(data => ({
+        name: Object.entries(data.displayNames).sort((a, b) => b[1] - a[1])[0][0],
+        count: data.count,
+        percent: totalBags > 0 ? Math.round((data.count / totalBags) * 100) : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
 
     // Calculate "Other" for countries
     const topCountryCount = byCountry.reduce((s, c) => s + c.count, 0);

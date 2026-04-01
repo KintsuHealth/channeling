@@ -1582,7 +1582,7 @@ export default function Home() {
         {/* Header */}
         <div style={{ padding: "20px 20px 16px", background: "var(--card)", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-            <img src="https://txoekzciwkstblucxhah.supabase.co/storage/v1/object/public/Logo/Expertso%20logo.png" alt="Expertso" style={{ height: 56 }} />
+            <img src="https://txoekzciwkstblucxhah.supabase.co/storage/v1/object/public/Logo/Expertso%20logo.png" alt="Expertso" style={{ height: 67 }} />
             <button onClick={() => setShowSettings(!showSettings)} style={{ background: "none", border: "none", fontSize: 18, color: showSettings ? "var(--accent)" : "var(--muted)", cursor: "pointer", padding: 4, position: "absolute", right: 0 }}>○</button>
           </div>
           {showSettings && (

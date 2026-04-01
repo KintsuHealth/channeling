@@ -1,10 +1,15 @@
 import { getRoastQuarter, isSameBatch } from './roastBatch';
 import { optimizePortions } from './portions';
 
-// Normalize string for comparison (lowercase, trim, remove extra spaces)
+// Normalize string for comparison (lowercase, trim, remove extra spaces, strip accents)
 function normalize(str) {
   if (!str) return '';
-  return str.toLowerCase().trim().replace(/\s+/g, ' ');
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, ''); // Strip accents
 }
 
 // Check if two strings are similar enough to be considered a match
