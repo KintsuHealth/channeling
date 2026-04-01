@@ -1273,7 +1273,7 @@ function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChang
 // ─── Main ───
 export default function Home() {
   const { user, signOut } = useAuth();
-  const { coffees, loading: coffeesLoading, addCoffee: addCoffeeToDb, updateCoffee: updateCoffeeInDb, moveToFreezer, archiveCoffee: archiveCoffeeInDb, deleteCoffee: deleteCoffeeFromDb, uploadLabelImage, migrateRestingCoffees } = useCoffees();
+  const { coffees, loading: coffeesLoading, addCoffee: addCoffeeToDb, updateCoffee: updateCoffeeInDb, moveToFreezer, archiveCoffee: archiveCoffeeInDb, unarchiveCoffee: unarchiveCoffeeInDb, deleteCoffee: deleteCoffeeFromDb, uploadLabelImage, migrateRestingCoffees } = useCoffees();
   const { baselineGrind, baselineGrindInput, setBaselineGrind, doseG, setDoseG, loading: settingsLoading } = useSettings();
   const loaded = !coffeesLoading && !settingsLoading;
   const [showSettings, setShowSettings] = useState(false);
@@ -1303,8 +1303,20 @@ export default function Home() {
     }
   };
 
+  // Archive confirmation state
+  const [archiveConfirm, setArchiveConfirm] = useState(null);
   const archiveCoffee = (id) => {
-    archiveCoffeeInDb(id);
+    const coffee = coffees.find(c => c.id === id);
+    setArchiveConfirm(coffee);
+  };
+  const confirmArchive = () => {
+    if (archiveConfirm) {
+      archiveCoffeeInDb(archiveConfirm.id);
+      setArchiveConfirm(null);
+    }
+  };
+  const unarchiveCoffee = (id) => {
+    unarchiveCoffeeInDb(id);
   };
 
   const [editingCoffee, setEditingCoffee] = useState(null);
@@ -2016,6 +2028,7 @@ export default function Home() {
                       <Stars value={c.rating || 0} size={12} />
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={(e) => { e.stopPropagation(); unarchiveCoffee(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--ice)", color: "var(--ice)", borderRadius: 5, fontSize: 11 }} title="Move to Freezer">❄</button>
                       <button onClick={(e) => { e.stopPropagation(); setEditingCoffee(c); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 5, fontSize: 11 }} title="Edit">✎</button>
                       <button onClick={(e) => { e.stopPropagation(); del(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 5, fontSize: 11 }} title="Delete">✕</button>
                     </div>
@@ -2072,6 +2085,22 @@ export default function Home() {
           onStartFresh={handleStartFresh}
           onClose={closeDuplicateModal}
         />
+      )}
+
+      {/* Archive Confirmation Modal */}
+      {archiveConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setArchiveConfirm(null)}>
+          <div style={{ background: "var(--bg)", borderRadius: 12, padding: 24, maxWidth: 320, width: "100%" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: "var(--text)" }}>Archive this coffee?</div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>
+              <strong>{archiveConfirm.name}</strong> will be moved to your archive.
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setArchiveConfirm(null)} style={{ flex: 1, padding: "10px 0", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+              <button onClick={confirmArchive} style={{ flex: 1, padding: "10px 0", background: "var(--done)", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Archive</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

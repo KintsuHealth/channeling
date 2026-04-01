@@ -203,6 +203,13 @@ export function useCoffees() {
     });
   }, [updateCoffee]);
 
+  const unarchiveCoffee = useCallback(async (id) => {
+    await updateCoffee(id, {
+      status: 'frozen',
+      finishedAt: null
+    });
+  }, [updateCoffee]);
+
   const deleteCoffee = useCallback(async (id) => {
     if (!user) return;
 
@@ -340,6 +347,7 @@ export function useCoffees() {
     updateCoffee,
     moveToFreezer,
     archiveCoffee,
+    unarchiveCoffee,
     deleteCoffee,
     uploadLabelImage,
     importCoffees,
