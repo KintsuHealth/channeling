@@ -172,11 +172,13 @@ export function useCoffees() {
 
       console.log("moveToFreezer: Updating coffee", id, "with:", dbUpdates);
 
-      const { error: updateError } = await supabase
+      const { data: updatedData, error: updateError } = await supabase
         .from('coffees')
         .update(dbUpdates)
         .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .select()
+        .single();
 
       if (updateError) {
         console.error("moveToFreezer: Update error:", updateError);
@@ -184,14 +186,17 @@ export function useCoffees() {
         return;
       }
 
-      console.log("moveToFreezer: Success! Updating local state.");
+      if (!updatedData) {
+        console.error("moveToFreezer: No data returned from update");
+        setError("Failed to move to freezer: update returned no data");
+        return;
+      }
 
-      // Update local state
-      setCoffees(prev => prev.map(c => c.id === id ? {
-        ...c,
-        status: 'frozen',
-        frozenAt: now.toISOString(),
-      } : c));
+      console.log("moveToFreezer: Success! Updated data:", updatedData);
+
+      // Update local state with the confirmed data from database
+      const updatedCoffee = fromDbFormat(updatedData);
+      setCoffees(prev => prev.map(c => c.id === id ? updatedCoffee : c));
     } catch (err) {
       console.error("moveToFreezer: Exception:", err);
       setError(err.message);
