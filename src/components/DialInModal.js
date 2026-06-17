@@ -22,11 +22,31 @@ function parseTemp(temp) {
   return { temp: t, unit };
 }
 
+// "25–35s" -> "25–35" (drop unit words, keep a single value or a range).
+function cleanSeconds(t) {
+  const nums = (String(t || "").match(/\d+(?:\.\d+)?/g) || []);
+  if (nums.length === 0) return "";
+  return nums.length === 1 ? nums[0] : `${nums[0]}–${nums[nums.length - 1]}`;
+}
+
+// Sum two (possibly-range) second strings into a total, e.g. "25–35" + "12–20" -> "37–55".
+function sumSeconds(a, b) {
+  const na = (String(a).match(/\d+(?:\.\d+)?/g) || []).map(Number);
+  const nb = (String(b).match(/\d+(?:\.\d+)?/g) || []).map(Number);
+  if (!na.length || !nb.length) return "";
+  const lo = na[0] + nb[0];
+  const hi = na[na.length - 1] + nb[nb.length - 1];
+  return lo === hi ? String(lo) : `${lo}–${hi}`;
+}
+
 // Turn a guidance drink into a saveable recipe. Grind is left blank (the user
-// dials the actual number using the direction hint, which goes in the notes).
+// dials the actual number using the direction hint, which goes in the notes);
+// the Slayer pre-brew / full-throttle times map to preInfuse / brewTime.
 function drinkToRecipe(drink, dose) {
   const factor = parseRatioFactor(drink.ratio);
   const { temp, unit } = parseTemp(drink.temp);
+  const preInfuse = cleanSeconds(drink.preBrew);
+  const brewTime = cleanSeconds(drink.fullThrottle);
   const notes = [
     drink.grindDirection ? `${drink.grindDirection} grind` : null,
     drink.ratio || null,
@@ -36,7 +56,7 @@ function drinkToRecipe(drink, dose) {
     name: drink.name || "Recipe",
     dose: String(dose),
     yield: factor ? String(Math.round(dose * factor)) : "",
-    preInfuse: "", brewTime: "", totalTime: "",
+    preInfuse, brewTime, totalTime: sumSeconds(preInfuse, brewTime),
     grind: "", feedSpeed: "",
     temp, tempUnit: unit,
     notes,
@@ -73,6 +93,13 @@ function DrinkCard({ drink, dose, selected, onToggle }) {
         )}
         {drink.temp && <span style={{ color: "var(--muted)" }}>{drink.temp}</span>}
       </div>
+      {(drink.preBrew || drink.fullThrottle) && (
+        <div style={{ marginTop: 5, fontSize: 12, fontFamily: "'DM Mono', monospace", color: "var(--accent-dark)" }}>
+          {drink.preBrew && <span>pre-brew {drink.preBrew}</span>}
+          {drink.preBrew && drink.fullThrottle && <span style={{ color: "var(--muted)" }}> → </span>}
+          {drink.fullThrottle && <span>full throttle {drink.fullThrottle}</span>}
+        </div>
+      )}
       {drink.note && (
         <div style={{ marginTop: 8, fontSize: 11.5, fontStyle: "italic", color: "var(--muted)" }}>{drink.note}</div>
       )}
@@ -181,7 +208,7 @@ export function DialInModal({ coffee, onApply, onClose }) {
             ))}
 
             <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 12 }}>
-              Saving sets the ratio (dose→yield) and notes the grind direction; dial the exact grind, then fill it in.
+              Saving sets the ratio (dose→yield), pre-brew &amp; full-throttle times, and notes the grind direction; dial the exact grind, then fill it in.
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>

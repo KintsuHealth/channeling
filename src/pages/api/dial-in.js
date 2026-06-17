@@ -86,7 +86,7 @@ export default async function handler(req, res) {
 
   const dose = c.doseG || 18;
 
-  const prompt = `You are a specialty-espresso expert. Using ONLY the bean's VARIETY and PROCESS (with origin and roast level as context), give concise dial-in guidance. Do NOT mention or research the roaster, farm, or provenance.
+  const prompt = `You are a specialty-espresso expert dialing for a SLAYER single-group machine (needle-valve manual flow control). Slayer technique: a long, gentle low-pressure PRE-BREW (needle valve cracked open) saturates the puck evenly, then you open to FULL THROTTLE for the main extraction. Use ONLY the bean's VARIETY and PROCESS (with origin and roast level as context). Do NOT mention or research the roaster, farm, or provenance.
 
 Bean:
 ${facts || "(minimal data — infer sensibly from variety/process conventions)"}
@@ -94,18 +94,20 @@ ${facts || "(minimal data — infer sensibly from variety/process conventions)"}
 For a ${dose}g dose, say how to pull this as ESPRESSO (black) vs FLAT WHITE (in milk). For each drink give:
 - grindDirection: relative to a normal medium-roast espresso grind. EXACTLY one of: "much finer", "finer", "slightly finer", "about the same", "slightly coarser", "coarser". (Dense/delicate/floral varieties like Gesha, Chiroso, SL28 grind finer; soluble naturals and extended/anaerobic ferments grind coarser to avoid over-extraction.)
 - ratio: brew ratio as input:output, e.g. "1:2.5". Espresso for delicate/floral beans runs LONGER (1:2.5–1:3) for aromatic clarity; sweeter/heavier beans nearer 1:2. Flat White CONCENTRATES (1:1.3–1:2, ristretto-leaning) so it cuts through milk.
+- preBrew: Slayer low-pressure pre-brew duration in seconds, e.g. "25–35s". Dense/delicate light roasts reward a LONGER pre-brew for even saturation (hold until first drops appear at the spout); soluble ferments need less.
+- fullThrottle: main full-flow extraction duration in seconds AFTER the pre-brew, e.g. "12–20s".
 - temp: a short range like "94–96°C".
-- note: ONE short line — the key lever or what to taste for.
+- note: ONE short line — the key Slayer lever or what to taste for.
 
-"insight": at most 2 sentences on what this variety + process mean for extraction, plus the principle "extend for black, concentrate for milk". No roaster, no farm history, no sources.
+"insight": at most 2 sentences on what this variety + process mean for extraction on a Slayer, plus the principle "extend for black, concentrate for milk". No roaster, no farm history, no sources.
 
 End with EXACTLY ONE fenced \`\`\`json block and nothing after it:
 \`\`\`json
 {
   "insight": "...",
   "drinks": [
-    {"name": "Espresso", "grindDirection": "...", "ratio": "1:2.5", "temp": "94–96°C", "note": "..."},
-    {"name": "Flat White", "grindDirection": "...", "ratio": "1:1.5", "temp": "93–95°C", "note": "..."}
+    {"name": "Espresso", "grindDirection": "...", "ratio": "1:2.5", "preBrew": "25–35s", "fullThrottle": "12–20s", "temp": "94–96°C", "note": "..."},
+    {"name": "Flat White", "grindDirection": "...", "ratio": "1:1.5", "preBrew": "15–25s", "fullThrottle": "10–18s", "temp": "93–95°C", "note": "..."}
   ]
 }
 \`\`\``;
