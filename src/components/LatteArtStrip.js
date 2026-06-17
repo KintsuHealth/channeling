@@ -86,7 +86,7 @@ function AddPourSheet({ onSave, onClose }) {
           <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: "36px 18px", marginBottom: 14, border: "1.5px dashed var(--border)", borderRadius: 10, cursor: "pointer", color: "var(--muted)" }}>
             <span style={{ fontSize: 30 }}>＋</span>
             <span style={{ fontSize: 13, fontWeight: 600 }}>Take / choose a photo</span>
-            <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
+            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
           </label>
         )}
 

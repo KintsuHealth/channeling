@@ -3,12 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// AI dial-in assistant: researches the specific coffee (farm / variety / producer)
-// with live web search, then returns saveable Espresso + Flat White recipes tuned
-// for a Slayer single-group (needle-valve pre-infusion). One-shot, no chat.
+// AI dial-in assistant: from the bean's VARIETY + PROCESS, returns concise
+// guidance for Espresso vs Flat White — grind direction (coarser/finer) and brew
+// ratio — not absolute settings. No roaster/provenance, no web search. One-shot.
 
-// Verify the caller is a signed-in Supabase user — this endpoint is expensive
-// (Opus + web search), so it must not be open to anonymous traffic.
+// Verify the caller is a signed-in Supabase user — keep the LLM endpoint off
+// anonymous traffic.
 async function getUser(req) {
   const auth = req.headers.authorization || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
@@ -27,7 +27,6 @@ async function getUser(req) {
 }
 
 // Pull the last fenced ```json block (falls back to a balanced-brace scan).
-// Web-search responses contain many text/citation blocks, so a greedy match is unsafe.
 function extractJson(text) {
   const fences = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
   for (let i = fences.length - 1; i >= 0; i--) {
@@ -73,80 +72,50 @@ export default async function handler(req, res) {
   if (rateLimited(user.id)) return res.status(429).json({ error: "Too many dial-ins — give it a few minutes." });
 
   const c = req.body || {};
-  const baselineGrind = c.baselineGrind;
-  const priorGrinds = Array.isArray(c.priorGrinds) ? c.priorGrinds.filter(Boolean) : [];
 
+  // Variety + process drive the call; origin/roast give context. No roaster/farm.
   const facts = [
-    ["Name", c.name],
-    ["Roaster", c.roaster],
+    ["Variety", c.variety],
+    ["Process", c.process],
     ["Country", c.country],
     ["Region", c.region],
-    ["Variety", c.variety],
-    ["Producer / farm", c.producer],
-    ["Process", c.process],
-    ["Roast level", c.roastLevel],
     ["Altitude", c.altitude || c.altitudeCategory],
-    ["Roast date", c.roastDate],
+    ["Roast level", c.roastLevel],
     ["Tasting notes", c.tastingNotes],
-    ["Bag weight", c.weight],
   ].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join("\n");
 
   const dose = c.doseG || 18;
-  const baselineLine = baselineGrind != null
-    ? `The user's baseline grind setting (medium roast reference) is ${baselineGrind}. Give the "grind" and "startingGrind" as ABSOLUTE settings on that same scale (a Geisha/dense light roast usually goes finer than baseline; a soluble extended-ferment lot a touch coarser).`
-    : `The user has not set a baseline grind. Express "grind" and "startingGrind" qualitatively (e.g. "fine", "finer than medium", "medium-fine").`;
-  const priorLine = priorGrinds.length
-    ? `Grind settings the user previously dialed for this or similar coffees: ${priorGrinds.join(", ")}. Lean on these.`
-    : "";
 
-  const prompt = `You are a specialty-coffee expert dialing espresso for a SLAYER single-group machine with a needle valve (manual flow / pressure profiling). Slayer technique: a long, gentle low-pressure PRE-BREW (needle valve barely open) to saturate the puck, then open to FULL THROTTLE for the main extraction. Recipes must give explicit pre-brew and full-throttle phase timings and a feed speed.
+  const prompt = `You are a specialty-espresso expert. Using ONLY the bean's VARIETY and PROCESS (with origin and roast level as context), give concise dial-in guidance. Do NOT mention or research the roaster, farm, or provenance.
 
-Research THIS specific coffee using web search — the farm/estate, the producer, the variety's character, and the roaster if identifiable. Use that provenance to inform the recipes. Cite real sources.
+Bean:
+${facts || "(minimal data — infer sensibly from variety/process conventions)"}
 
-Coffee:
-${facts || "(minimal label data — infer sensibly from what is given)"}
+For a ${dose}g dose, say how to pull this as ESPRESSO (black) vs FLAT WHITE (in milk). For each drink give:
+- grindDirection: relative to a normal medium-roast espresso grind. EXACTLY one of: "much finer", "finer", "slightly finer", "about the same", "slightly coarser", "coarser". (Dense/delicate/floral varieties like Gesha, Chiroso, SL28 grind finer; soluble naturals and extended/anaerobic ferments grind coarser to avoid over-extraction.)
+- ratio: brew ratio as input:output, e.g. "1:2.5". Espresso for delicate/floral beans runs LONGER (1:2.5–1:3) for aromatic clarity; sweeter/heavier beans nearer 1:2. Flat White CONCENTRATES (1:1.3–1:2, ristretto-leaning) so it cuts through milk.
+- temp: a short range like "94–96°C".
+- note: ONE short line — the key lever or what to taste for.
 
-Dose to target: ${dose}g.
-${baselineLine}
-${priorLine}
+"insight": at most 2 sentences on what this variety + process mean for extraction, plus the principle "extend for black, concentrate for milk". No roaster, no farm history, no sources.
 
-Produce TWO recipes for a ${dose}g dose:
-- "Espresso" (black): play to the bean's strengths. Delicate washed/floral coffees want a LONGER, hotter, gentler pull (stretch the ratio, longer pre-brew) for aromatic clarity; sweeter/heavier/extended-ferment coffees want a more standard, slightly cooler pull for structure.
-- "Flat White" (in milk): CONCENTRATE so it reads through dairy — shorter ratio / ristretto-leaning, especially for delicate beans whose top notes milk would erase.
-The more delicate and aromatic the coffee, the bigger the gap between the two recipes.
-
-Then write a short "insight" (3–5 sentences): the provenance you found and the one-line dialing rationale ("extend for black, concentrate for milk"), plus a quick correction cheat-sheet (sour/fast → finer + hotter + longer pre-brew; harsh/slow → coarser + cooler).
-
-End your reply with EXACTLY ONE fenced \`\`\`json code block, no prose after it, matching this shape (strings only; omit a field with "" if unknown; tempUnit "C"):
+End with EXACTLY ONE fenced \`\`\`json block and nothing after it:
 \`\`\`json
 {
   "insight": "...",
-  "sources": [{"title": "...", "url": "..."}],
-  "startingGrind": "absolute grind for the espresso recipe",
-  "espresso":  {"name": "Espresso",  "dose": "${dose}", "yield": "", "preInfuse": "", "brewTime": "", "totalTime": "", "grind": "", "feedSpeed": "slow|medium|fast|auto", "temp": "", "tempUnit": "C", "notes": ""},
-  "flatWhite": {"name": "Flat White", "dose": "${dose}", "yield": "", "preInfuse": "", "brewTime": "", "totalTime": "", "grind": "", "feedSpeed": "slow|medium|fast|auto", "temp": "", "tempUnit": "C", "notes": ""}
+  "drinks": [
+    {"name": "Espresso", "grindDirection": "...", "ratio": "1:2.5", "temp": "94–96°C", "note": "..."},
+    {"name": "Flat White", "grindDirection": "...", "ratio": "1:1.5", "temp": "93–95°C", "note": "..."}
+  ]
 }
 \`\`\``;
 
   try {
-    let messages = [{ role: "user", content: prompt }];
-    let response;
-    // Server-tool loop: continue while the model pauses mid-search.
-    for (let i = 0; i < 4; i++) {
-      response = await client.messages.create({
-        model: "claude-opus-4-8",
-        max_tokens: 3500,
-        messages,
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }],
-      });
-      if (response.stop_reason !== "pause_turn") break;
-      messages = [...messages, { role: "assistant", content: response.content }];
-    }
-
-    // Still paused after the loop → research didn't finish; let the client retry.
-    if (response.stop_reason === "pause_turn") {
-      return res.status(504).json({ error: "Dial-in timed out while researching. Please try again." });
-    }
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1200,
+      messages: [{ role: "user", content: prompt }],
+    });
 
     const text = response.content
       .filter((b) => b.type === "text")
@@ -154,7 +123,7 @@ End your reply with EXACTLY ONE fenced \`\`\`json code block, no prose after it,
       .join("");
 
     const parsed = extractJson(text);
-    if (!parsed || (!parsed.espresso && !parsed.flatWhite)) {
+    if (!parsed || !Array.isArray(parsed.drinks) || parsed.drinks.length === 0) {
       console.error("Dial-in parse failure. Raw:", text.slice(0, 500));
       return res.status(502).json({ error: "Could not read the dial-in result. Please try again." });
     }

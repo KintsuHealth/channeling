@@ -164,7 +164,7 @@ function Stars({ value, size = 14 }) {
 
 // ─── Now Brewing Section ───
 
-function NowBrewing({ coffee, onUseDose, onPull }) {
+function NowBrewing({ coffee, onUseDose, onPull, recipeSlot }) {
   if (!coffee) {
     return (
       <div style={{
@@ -262,8 +262,11 @@ function NowBrewing({ coffee, onUseDose, onPull }) {
         </div>
       </div>
 
-      {/* Espresso recipe(s) for the bag being brewed */}
-      {(() => {
+      {/* Recipe(s) for the bag being brewed — editable manager when provided,
+          otherwise a read-only summary. */}
+      {recipeSlot ? (
+        <div style={{ marginTop: 14 }}>{recipeSlot}</div>
+      ) : (() => {
         const recipes = getRecipes(coffee).filter((r) => r.grind || r.dose || r.yield || r.totalTime || r.time);
         if (recipes.length === 0) return null;
         return (
@@ -627,7 +630,7 @@ function RecentActivity({ recentlyAdded, lastFinished }) {
 
 // ─── Main Overview Component ───
 
-export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewResting, latteArt }) {
+export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewResting, latteArt, recipeSlot }) {
   const {
     activeCoffee,
     restingCoffees,
@@ -679,6 +682,7 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
           coffee={activeCoffee}
           onUseDose={onUseDose}
           onPull={onPullFromFreezer}
+          recipeSlot={recipeSlot}
         />
       </div>
 

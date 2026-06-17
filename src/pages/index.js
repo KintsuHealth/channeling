@@ -376,8 +376,11 @@ function PredictionValidationBadge({ predicted, actual }) {
 }
 
 // Editor for a single recipe — name + brew fields. Self-contained local state.
+const BEVERAGES = ["Espresso", "Ristretto", "Lungo", "Flat White", "Cortado", "Cappuccino", "Latte", "Macchiato", "Americano"];
+
 function RecipeEditor({ value, onSave, onCancel }) {
   const [loc, setLoc] = useState(value || emptyRecipe());
+  const [customName, setCustomName] = useState(!!(value?.name && !BEVERAGES.includes(value.name)));
   const tempUnit = loc.tempUnit || "C";
   const setTempUnit = (u) => setLoc({ ...loc, tempUnit: u });
 
@@ -388,10 +391,25 @@ function RecipeEditor({ value, onSave, onCancel }) {
 
   return (
     <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10, padding: 12, background: "#FAF7F4", borderRadius: 8, border: "1px solid var(--border)" }}>
-      {/* Recipe name */}
+      {/* Beverage */}
       <div style={{ marginBottom: 10 }}>
-        <label style={labelStyle}>Recipe name</label>
-        <input value={loc.name || ""} onChange={(e) => setLoc({ ...loc, name: e.target.value })} placeholder="e.g. Flat White, Straight Espresso" style={{ ...inputStyle, fontFamily: "inherit", fontWeight: 600 }} />
+        <label style={labelStyle}>Beverage</label>
+        <select
+          value={customName ? "__custom__" : (BEVERAGES.includes(loc.name) ? loc.name : "")}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "__custom__") { setCustomName(true); if (BEVERAGES.includes(loc.name)) setLoc({ ...loc, name: "" }); }
+            else { setCustomName(false); setLoc({ ...loc, name: v }); }
+          }}
+          style={{ ...inputStyle, fontFamily: "inherit", fontWeight: 600 }}
+        >
+          <option value="">Select…</option>
+          {BEVERAGES.map((b) => <option key={b} value={b}>{b}</option>)}
+          <option value="__custom__">Other…</option>
+        </select>
+        {customName && (
+          <input value={loc.name || ""} onChange={(e) => setLoc({ ...loc, name: e.target.value })} placeholder="Custom name" style={{ ...inputStyle, fontFamily: "inherit", fontWeight: 600, marginTop: 6 }} />
+        )}
       </div>
 
       {/* Dose & Yield */}
@@ -1727,6 +1745,18 @@ export default function Home() {
               onPullFromFreezer={() => setView("freezer")}
               onViewResting={() => setView("resting")}
               latteArt={{ pours: lattePours, createPour: createLattePour, deletePour: deleteLattePour }}
+              recipeSlot={(() => {
+                const ac = stats.activeCoffee ? (coffees.find((c) => c.id === stats.activeCoffee.id) || stats.activeCoffee) : null;
+                return ac ? (
+                  <EspressoRecipe
+                    key={ac.id}
+                    coffee={ac}
+                    onChange={(patch) => update(ac.id, patch)}
+                    baseline={baselineGrind}
+                    allCoffees={coffees}
+                  />
+                ) : null;
+              })()}
             />
           )}
 
