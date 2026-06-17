@@ -43,6 +43,7 @@ export const fieldMap = {
     updatedAt: 'updated_at',
     targetRestDays: 'target_rest_days',
     daysRested: 'days_rested',
+    dialInNotes: 'dial_in_notes',
   },
   fromDb: {
     roast_level: 'roastLevel',
@@ -68,6 +69,7 @@ export const fieldMap = {
     updated_at: 'updatedAt',
     target_rest_days: 'targetRestDays',
     days_rested: 'daysRested',
+    dial_in_notes: 'dialInNotes',
   }
 };
 
@@ -78,8 +80,8 @@ const validCoffeeColumns = new Set([
   'tasting_notes', 'roast_date', 'bag_color', 'text_color', 'label_image_url',
   'status', 'grams_total', 'portions', 'portion_index', 'doses_used', 'dose_g',
   'added_at', 'frozen_at', 'pulled_at', 'finished_at',
-  'espresso', 'favorite', 'rating', 'grind_offset_prediction', 'grind_offset_rationale',
-  'grind_confidence', 'target_rest_days', 'days_rested'
+  'espresso', 'recipes', 'favorite', 'rating', 'grind_offset_prediction', 'grind_offset_rationale',
+  'grind_confidence', 'target_rest_days', 'days_rested', 'dial_in_notes'
 ]);
 
 export function toDbFormat(obj, filterUnknown = true) {

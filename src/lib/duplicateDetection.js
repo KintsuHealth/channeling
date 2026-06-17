@@ -1,5 +1,6 @@
 import { getRoastQuarter, isSameBatch } from './roastBatch';
 import { optimizePortions } from './portions';
+import { primaryRecipe } from './recipes';
 
 // Normalize string for comparison (lowercase, trim, remove extra spaces, strip accents)
 function normalize(str) {
@@ -101,7 +102,7 @@ export function getDuplicateSummary(match, newCoffee) {
     matchQuarter,
     newQuarter,
     sameBatch,
-    hasRecipe: !!(match.espresso?.dose || match.espresso?.yield || match.espresso?.grind),
+    hasRecipe: (() => { const r = primaryRecipe(match); return !!(r?.dose || r?.yield || r?.grind); })(),
     portionsRemaining: (match.portions?.length || 0) - (match.portionIndex || 0),
     gramsRemaining: calculateRemainingGrams(match)
   };

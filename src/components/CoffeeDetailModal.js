@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { getRecipes } from "../lib/recipes";
+import { DialInModal } from "./DialInModal";
 
 function LabelCard({ coffee, size = "large" }) {
   const bgColor = coffee.bagColor || "#6B4423";
@@ -110,7 +112,8 @@ const STATUS_LABELS = {
   done: { label: "Archived", color: "var(--done)", icon: "✓" },
 };
 
-export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive }) {
+export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive, onUpdate, baseline, allCoffees }) {
+  const [showDialIn, setShowDialIn] = useState(false);
   if (!coffee) return null;
 
   const status = STATUS_LABELS[coffee.status] || STATUS_LABELS.frozen;
@@ -278,32 +281,54 @@ export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive }) {
           </div>
         )}
 
-        {/* Espresso Recipe */}
-        {coffee.espresso && (coffee.espresso.dose || coffee.espresso.grind) && (
+        {/* Recipes */}
+        {(() => {
+          const recipes = getRecipes(coffee).filter((r) => r.dose || r.grind || r.yield || r.totalTime || r.time);
+          if (recipes.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", marginBottom: 10 }}>
+                {recipes.length > 1 ? "Recipes" : "Espresso Recipe"}
+              </div>
+              {recipes.map((r, ri) => (
+                <div key={r.id || ri} style={{
+                  padding: "14px 16px",
+                  marginBottom: ri < recipes.length - 1 ? 10 : 0,
+                  background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)",
+                  border: "1.5px solid var(--accent-light)",
+                  borderRadius: 10,
+                }}>
+                  {recipes.length > 1 && (
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-dark)", marginBottom: 8 }}>{r.name || `Recipe ${ri + 1}`}</div>
+                  )}
+                  <div style={{ display: "flex", gap: 16, fontSize: 16, fontFamily: "'DM Mono', monospace", fontWeight: 600, marginBottom: 8 }}>
+                    {r.dose && <span>{r.dose}g in</span>}
+                    {r.yield && <span>→ {r.yield}g out</span>}
+                  </div>
+                  <div style={{ display: "flex", gap: 16, fontSize: 13, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>
+                    {(r.totalTime || r.time) && <span>{r.totalTime || r.time}s</span>}
+                    {r.grind && <span>@{r.grind}</span>}
+                    {r.temp && <span>{r.temp}°{r.tempUnit || "C"}</span>}
+                  </div>
+                  {r.notes && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", fontSize: 12, fontStyle: "italic" }}>
+                      "{r.notes}"
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* Dial-in insight */}
+        {coffee.dialInNotes && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", marginBottom: 10 }}>
-              Espresso Recipe
+              🤖 Dial-in insight
             </div>
-            <div style={{
-              padding: "14px 16px",
-              background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)",
-              border: "1.5px solid var(--accent-light)",
-              borderRadius: 10,
-            }}>
-              <div style={{ display: "flex", gap: 16, fontSize: 16, fontFamily: "'DM Mono', monospace", fontWeight: 600, marginBottom: 8 }}>
-                {coffee.espresso.dose && <span>{coffee.espresso.dose}g in</span>}
-                {coffee.espresso.yield && <span>→ {coffee.espresso.yield}g out</span>}
-              </div>
-              <div style={{ display: "flex", gap: 16, fontSize: 13, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>
-                {(coffee.espresso.totalTime || coffee.espresso.time) && <span>{coffee.espresso.totalTime || coffee.espresso.time}s</span>}
-                {coffee.espresso.grind && <span>@{coffee.espresso.grind}</span>}
-                {coffee.espresso.temp && <span>{coffee.espresso.temp}°{coffee.espresso.tempUnit || "C"}</span>}
-              </div>
-              {coffee.espresso.notes && (
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", fontSize: 12, fontStyle: "italic" }}>
-                  "{coffee.espresso.notes}"
-                </div>
-              )}
+            <div style={{ padding: "12px 14px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12.5, lineHeight: 1.6, color: "var(--text)", whiteSpace: "pre-wrap" }}>
+              {coffee.dialInNotes}
             </div>
           </div>
         )}
@@ -337,8 +362,23 @@ export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive }) {
           </div>
         )}
 
+        {/* AI Dial-In */}
+        {onUpdate && (
+          <button
+            onClick={() => setShowDialIn(true)}
+            style={{
+              width: "100%", marginTop: 20, padding: "13px",
+              background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)",
+              border: "1.5px solid var(--accent)", borderRadius: 10,
+              fontSize: 14, fontWeight: 700, color: "var(--accent-dark)", cursor: "pointer",
+            }}
+          >
+            🤖 Dial in this coffee
+          </button>
+        )}
+
         {/* Action Buttons */}
-        <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+        <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
           <button
             onClick={onClose}
             style={{
@@ -393,6 +433,17 @@ export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive }) {
           )}
         </div>
       </div>
+
+      {showDialIn && (
+        <DialInModal
+          key={coffee.id}
+          coffee={coffee}
+          baseline={baseline}
+          allCoffees={allCoffees}
+          onApply={(newRecs, insight) => onUpdate(coffee.id, { recipes: [...getRecipes(coffee), ...newRecs], espresso: null, dialInNotes: insight })}
+          onClose={() => setShowDialIn(false)}
+        />
+      )}
     </div>
   );
 }

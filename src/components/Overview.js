@@ -1,4 +1,6 @@
-// Overview component - no direct dose imports needed
+// Overview component
+import { getRecipes } from "../lib/recipes";
+import LatteArtStrip from "./LatteArtStrip";
 
 // ─── Country Codes ───
 const COUNTRY_CODES = {
@@ -259,6 +261,42 @@ function NowBrewing({ coffee, onUseDose, onPull }) {
           )}
         </div>
       </div>
+
+      {/* Espresso recipe(s) for the bag being brewed */}
+      {(() => {
+        const recipes = getRecipes(coffee).filter((r) => r.grind || r.dose || r.yield || r.totalTime || r.time);
+        if (recipes.length === 0) return null;
+        return (
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+            {recipes.map((r, i) => (
+              <div key={r.id || i} style={{
+                padding: "10px 12px",
+                background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)",
+                border: "1.5px solid var(--accent-light)",
+                borderRadius: 8,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)" }}>
+                    ● {recipes.length > 1 ? (r.name || `Recipe ${i + 1}`) : "Recipe"}
+                  </span>
+                  {r.grind && (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", background: "var(--accent-dark)", borderRadius: 5 }}>
+                      <span style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Grind</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "#fff" }}>{r.grind}</span>
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6, fontSize: 12, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
+                  {(r.dose || r.yield) && <span>{r.dose || "—"}g → {r.yield || "—"}g</span>}
+                  {(r.totalTime || r.time) && <span>{r.totalTime || r.time}s</span>}
+                  {r.temp && <span>{r.temp}°{r.tempUnit || "C"}</span>}
+                  {r.feedSpeed && <span style={{ textTransform: "capitalize" }}>{r.feedSpeed}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Quick Use Dose Button */}
       <button
@@ -589,7 +627,7 @@ function RecentActivity({ recentlyAdded, lastFinished }) {
 
 // ─── Main Overview Component ───
 
-export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewResting }) {
+export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewResting, latteArt }) {
   const {
     activeCoffee,
     restingCoffees,
@@ -724,6 +762,15 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
           icon="◦"
           title="Varieties"
           data={byVariety}
+        />
+      )}
+
+      {/* Latte Art */}
+      {latteArt && (
+        <LatteArtStrip
+          pours={latteArt.pours}
+          createPour={latteArt.createPour}
+          deletePour={latteArt.deletePour}
         />
       )}
 

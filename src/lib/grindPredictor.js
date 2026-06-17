@@ -2,6 +2,39 @@
  * Grind Predictor - Estimates starting grind settings based on bean characteristics
  */
 
+import { primaryRecipe } from "./recipes";
+
+// Variety density/extraction table (substring match, first hit wins).
+// Negative = finer (dense or delicate/aromatic), positive = coarser.
+// NOTE: order matters — list specific names before generic ones (e.g. pink bourbon before bourbon).
+const VARIETY_OFFSETS = [
+  { match: ['gesha', 'geisha'], offset: -0.1, label: 'Gesha → finer (dense, delicate)' },
+  { match: ['chiroso'], offset: -0.1, label: 'Chiroso (Gesha-adjacent) → finer' },
+  { match: ['sl28', 'sl 28', 'sl-28', 'sl34', 'sl 34', 'sl-34'], offset: -0.1, label: 'SL28/34 → finer (dense Kenyan)' },
+  { match: ['pacamara'], offset: -0.05, label: 'Pacamara → touch finer' },
+  { match: ['pink bourbon'], offset: -0.05, label: 'Pink Bourbon → touch finer' },
+  { match: ['bourbon'], offset: 0, label: 'Bourbon → baseline density' },
+  { match: ['typica'], offset: 0, label: 'Typica → baseline density' },
+  { match: ['caturra'], offset: 0, label: 'Caturra → baseline density' },
+  { match: ['castillo'], offset: 0, label: 'Castillo → baseline density' },
+  { match: ['catuai', 'catuaí'], offset: 0, label: 'Catuaí → baseline density' },
+  { match: ['robusta'], offset: 0.2, label: 'Robusta → coarser' },
+];
+
+// Continuous days-off-roast offset, clamped to [-0.2, +0.1].
+// Fresh beans (CO2-heavy) read coarser; offset eases to ~0 by the ~day-12 peak,
+// then trends finer with a gentle exponential decay as the bean ages.
+function freshnessOffsetCurve(days) {
+  const peak = 12;
+  let v;
+  if (days <= peak) {
+    v = 0.1 * (1 - days / peak);
+  } else {
+    v = -0.2 * (1 - Math.exp(-(days - peak) / 18));
+  }
+  return Math.max(-0.2, Math.min(0.1, v));
+}
+
 /**
  * Parse altitude string into numeric meters
  * @param {string} altitudeStr - Free-form altitude string (e.g., "1800m", "1400-1600 masl")
@@ -137,12 +170,13 @@ export function calculateGrindOffset(coffee, pulledAt = null) {
   const rationale = [];
   let offset = 0;
   let factorsPresent = 0;
+  let roastOffset = 0; // hoisted so the roast×process interaction term can read it
 
   // 1. Roast Level: -0.4 to +0.4
   // Light roasts need finer grind (negative offset), dark roasts need coarser (positive)
   const roastLevel = coffee?.roastLevel;
   if (roastLevel !== undefined && roastLevel !== null && roastLevel !== '') {
-    let roastOffset = 0;
+    roastOffset = 0;
 
     // Handle numeric scale (1-5)
     if (typeof roastLevel === 'number') {
@@ -268,43 +302,37 @@ export function calculateGrindOffset(coffee, pulledAt = null) {
   const days = roastDate ? daysSinceRoast(roastDate) : null;
 
   if (days !== null) {
-    let freshnessOffset = 0;
-
-    if (days < 7) {
-      freshnessOffset = 0.1;
-      rationale.push(`Fresh (${days}d off roast) → touch coarser`);
-    } else if (days >= 7 && days <= 21) {
-      freshnessOffset = 0;
-      rationale.push(`Peak freshness (${days}d) → baseline`);
-    } else if (days > 21 && days <= 35) {
-      freshnessOffset = -0.1;
-      rationale.push(`Aging (${days}d) → touch finer`);
-    } else if (days > 35) {
-      freshnessOffset = -0.2;
-      rationale.push(`Older (${days}d) → slightly finer`);
-    }
+    // Smooth CO2-degas curve instead of hard brackets: coarse when fresh and
+    // gassy, easing through the ~day-12 peak, then trending finer as it ages.
+    const freshnessOffset = freshnessOffsetCurve(days);
+    let label;
+    if (days < 7) label = `Fresh (${days}d off roast) → touch coarser`;
+    else if (days <= 18) label = `Near peak (${days}d) → ~baseline`;
+    else label = `Aging (${days}d) → finer`;
+    rationale.push(label);
 
     offset += freshnessOffset;
     factorsPresent++;
   }
 
-  // 5. Variety: -0.1 to +0.2 (only for specific varieties)
+  // 5. Variety: dense/aromatic cultivars trend finer, robusta coarser.
   if (coffee.variety) {
     const variety = coffee.variety.toLowerCase();
-    let varietyOffset = 0;
-
-    if (variety.includes('gesha') || variety.includes('geisha')) {
-      varietyOffset = -0.1;
-      rationale.push('Gesha variety → touch finer');
-      factorsPresent++;
-    } else if (variety.includes('robusta')) {
-      varietyOffset = 0.2;
-      rationale.push('Robusta → slightly coarser');
+    const entry = VARIETY_OFFSETS.find((v) => v.match.some((m) => variety.includes(m)));
+    if (entry) {
+      offset += entry.offset;
+      rationale.push(entry.label);
       factorsPresent++;
     }
-    // Other varieties don't contribute to offset
+  }
 
-    offset += varietyOffset;
+  // 6. Interaction: a light roast on a high-extraction (natural/anaerobic) ferment
+  // is very soluble — the additive terms nearly cancel and under-predict, so nudge
+  // coarser to head off over-extraction (boozy/harsh).
+  if (roastOffset <= -0.2 && (process === 'natural' || process === 'anaerobic')) {
+    const bump = process === 'anaerobic' ? 0.3 : 0.2;
+    offset += bump;
+    rationale.push(`Light + ${process} ferment → extra coarser (counter over-extraction)`);
   }
 
   // Determine confidence based on factors present
@@ -363,12 +391,57 @@ export function formatOffset(offset) {
  * @param {number} offset - Calculated offset
  * @returns {number}
  */
-export function calculateSuggestedGrind(baseline, offset) {
+export function calculateSuggestedGrind(baseline, offset, calibration = 0) {
   if (baseline === null || baseline === undefined) return null;
   // Ensure baseline is a number (Supabase may return string)
   const baselineNum = typeof baseline === 'string' ? parseFloat(baseline) : Number(baseline);
   if (isNaN(baselineNum)) return null;
-  return Math.round((baselineNum + offset) * 10) / 10;
+  return Math.round((baselineNum + offset + (calibration || 0)) * 10) / 10;
+}
+
+/**
+ * Learn a personal calibration from the grinds the user actually settled on.
+ *
+ * For each past coffee that has both a recorded recipe grind and a stored
+ * prediction offset, the residual is (actualGrind − (baseline + predictedOffset)).
+ * If the user systematically lands finer/coarser than the model predicts, the
+ * averaged residual nudges future suggestions toward what has worked for them.
+ * Favorited / highly-rated coffees are weighted more (those are "dialed in").
+ *
+ * @param {Array} allCoffees
+ * @param {number} baseline - user's baseline grind
+ * @returns {{ calibration: number, sampleSize: number }}
+ */
+export function calculatePersonalCalibration(allCoffees, baseline) {
+  const baseNum = typeof baseline === 'string' ? parseFloat(baseline) : Number(baseline);
+  if (!Array.isArray(allCoffees) || isNaN(baseNum)) return { calibration: 0, sampleSize: 0 };
+
+  const samples = [];
+  for (const c of allCoffees) {
+    const grind = parseFloat(primaryRecipe(c)?.grind);
+    const predOffset = typeof c?.grindOffsetPrediction === 'number'
+      ? c.grindOffsetPrediction
+      : parseFloat(c?.grindOffsetPrediction);
+    if (isNaN(grind) || isNaN(predOffset)) continue;
+    const residual = grind - (baseNum + predOffset);
+    // Ignore implausible residuals (likely different machine/baseline noise).
+    if (Math.abs(residual) > 3) continue;
+    const rating = Number(c.rating) || 0;
+    const weight = (c.favorite ? 2 : 1) + (rating >= 4 ? 1 : 0); // always >= 1
+    const when = new Date(c.finishedAt || c.pulledAt || c.frozenAt || c.addedAt || 0).getTime();
+    samples.push({ residual, weight, when });
+  }
+
+  if (samples.length < 2) return { calibration: 0, sampleSize: samples.length };
+
+  // Use the most recent ~10 dial-ins.
+  samples.sort((a, b) => b.when - a.when);
+  const recent = samples.slice(0, 10);
+  const totalW = recent.reduce((s, x) => s + x.weight, 0);
+  if (totalW <= 0) return { calibration: 0, sampleSize: recent.length };
+  const weighted = recent.reduce((s, x) => s + x.residual * x.weight, 0) / totalW;
+
+  return { calibration: Math.round(weighted * 10) / 10, sampleSize: recent.length };
 }
 
 /**
@@ -383,7 +456,7 @@ export function findPreviousGrindSettings(coffee, allCoffees) {
   // Look for coffees with same name and/or roaster (excluding current)
   const matches = allCoffees.filter(c => {
     if (c.id === coffee.id) return false;
-    if (!c.espresso?.grind) return false;
+    if (!primaryRecipe(c)?.grind) return false;
 
     const sameName = c.name && coffee.name &&
       c.name.toLowerCase() === coffee.name.toLowerCase();
@@ -403,7 +476,7 @@ export function findPreviousGrindSettings(coffee, allCoffees) {
   });
 
   return {
-    grind: sorted[0].espresso.grind,
+    grind: primaryRecipe(sorted[0])?.grind,
     coffee: sorted[0]
   };
 }

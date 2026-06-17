@@ -50,7 +50,7 @@ Return ONLY a raw JSON object — no markdown, no backticks, no explanation:
   "altitude": "growing altitude if listed",
   "weight": "bag weight with unit (e.g. 300g, 250g, 12oz, 1lb)",
   "price": "price if visible",
-  "tastingNotes": "tasting notes / flavor descriptors",
+  "tastingNotes": "tasting notes / flavor descriptors, IN ENGLISH (translate if printed in another language)",
   "rawNotes": "harvest date, certifications, other notable text",
   "bagColor": "#C41E3A",
   "textColor": "#FFFFFF"
@@ -59,6 +59,8 @@ Return ONLY a raw JSON object — no markdown, no backticks, no explanation:
 For bagColor: extract the PRIMARY/DOMINANT color of the coffee bag as a hex code. This is usually the main bag color (red, black, white, kraft brown, green, etc.)
 
 For textColor: pick white (#FFFFFF) if bagColor is dark, or black/dark (#1A1A1A) if bagColor is light. This ensures readable contrast.
+
+TASTING NOTES LANGUAGE: If the tasting notes / flavor descriptors on the bag are written in a language other than English (e.g. Spanish, Portuguese, Italian), translate them into natural English flavor descriptors for "tastingNotes", preserving meaning and the concise comma-separated style (e.g. "panela, frutos rojos, chocolate amargo" → "panela, red fruits, dark chocolate"). If they are already in English, return them unchanged. Do not translate proper names of varieties, processes, farms, or places.
 
 Use null for any field not visible. Be precise with the hex color - it will be used to create a digital label card.`,
             },

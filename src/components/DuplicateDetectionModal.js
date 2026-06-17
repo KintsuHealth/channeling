@@ -1,4 +1,5 @@
 import { getRoastQuarter, isSameBatch } from '../lib/roastBatch';
+import { getRecipes, primaryRecipe } from '../lib/recipes';
 
 function MiniLabelCard({ coffee }) {
   const bgColor = coffee.bagColor || "#6B4423";
@@ -69,8 +70,10 @@ function QuarterBadge({ quarter, size = "normal" }) {
   );
 }
 
-function RecipePreview({ espresso }) {
-  if (!espresso || (!espresso.dose && !espresso.yield && !espresso.grind)) {
+function RecipePreview({ coffee }) {
+  const recipe = primaryRecipe(coffee);
+  const count = getRecipes(coffee).length;
+  if (!recipe || (!recipe.dose && !recipe.yield && !recipe.grind)) {
     return null;
   }
 
@@ -83,10 +86,11 @@ function RecipePreview({ espresso }) {
       fontSize: 12,
       fontFamily: "'DM Mono', monospace",
     }}>
-      <span style={{ fontWeight: 600 }}>Recipe:</span>{" "}
-      {espresso.dose && <span>{espresso.dose}g</span>}
-      {espresso.yield && <span> → {espresso.yield}g</span>}
-      {espresso.grind && <span> @ {espresso.grind}</span>}
+      <span style={{ fontWeight: 600 }}>{count > 1 ? (recipe.name || "Recipe") : "Recipe"}:</span>{" "}
+      {recipe.dose && <span>{recipe.dose}g</span>}
+      {recipe.yield && <span> → {recipe.yield}g</span>}
+      {recipe.grind && <span> @ {recipe.grind}</span>}
+      {count > 1 && <span style={{ color: "var(--muted)" }}> · +{count - 1} more</span>}
     </div>
   );
 }
@@ -111,7 +115,8 @@ export function DuplicateDetectionModal({
   const matchQuarter = getRoastQuarter(matchedCoffee.roastDate);
   const newQuarter = getRoastQuarter(newCoffee?.roastDate);
   const sameBatch = isSameBatch(matchedCoffee, newCoffee);
-  const hasRecipe = !!(matchedCoffee.espresso?.dose || matchedCoffee.espresso?.yield || matchedCoffee.espresso?.grind);
+  const matchPrimaryRecipe = primaryRecipe(matchedCoffee);
+  const hasRecipe = !!(matchPrimaryRecipe?.dose || matchPrimaryRecipe?.yield || matchPrimaryRecipe?.grind);
   const status = STATUS_LABELS[matchedCoffee.status] || STATUS_LABELS.frozen;
 
   // Calculate remaining portions
@@ -216,7 +221,7 @@ export function DuplicateDetectionModal({
                   </span>
                 )}
               </div>
-              {hasRecipe && <RecipePreview espresso={matchedCoffee.espresso} />}
+              {hasRecipe && <RecipePreview coffee={matchedCoffee} />}
             </div>
           </div>
         </div>
@@ -340,7 +345,7 @@ export function DuplicateDetectionModal({
                 marginTop: 2,
               }}>
                 {hasRecipe
-                  ? "Start fresh but inherit espresso settings"
+                  ? "Start fresh but inherit saved recipes"
                   : "No recipe to copy — will start blank"
                 }
               </div>
