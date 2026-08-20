@@ -1,17 +1,36 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 // One "···" per card instead of a row of tiny bordered buttons. Items:
-// { label, icon, onClick, danger }. Renders its own backdrop so a tap
-// anywhere else closes it.
+// { label, icon, onClick, danger }. The dropdown is portaled to <body> with
+// fixed positioning so it can never be painted over by sibling cards
+// (transforms/animations on cards create stacking contexts that would
+// otherwise clip or cover an absolutely-positioned menu).
 export default function CardMenu({ items, size = 30 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const btnRef = useRef(null);
   const visible = (items || []).filter(Boolean);
   if (visible.length === 0) return null;
+
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      const menuH = visible.length * 38 + 8;
+      const openUp = r.bottom + menuH > window.innerHeight - 80;
+      setPos({
+        top: openUp ? Math.max(8, r.top - menuH - 6) : r.bottom + 6,
+        right: Math.max(8, window.innerWidth - r.right),
+      });
+    }
+    setOpen(!open);
+  };
 
   return (
     <div style={{ position: "relative", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
       <button
-        onClick={() => setOpen(!open)}
+        ref={btnRef}
+        onClick={toggle}
         aria-label="More actions"
         style={{
           width: size, height: size, borderRadius: size / 2,
@@ -21,15 +40,18 @@ export default function CardMenu({ items, size = 30 }) {
           display: "flex", alignItems: "center", justifyContent: "center",
         }}
       >···</button>
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <>
-          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 400 }} />
-          <div style={{
-            position: "absolute", right: 0, top: size + 6, zIndex: 401,
-            background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12,
-            boxShadow: "var(--shadow-lg)", padding: 4, minWidth: 168,
-            animation: "fadeUp 0.12s ease both",
-          }}>
+          <div onClick={(e) => { e.stopPropagation(); setOpen(false); }} style={{ position: "fixed", inset: 0, zIndex: 900 }} />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "fixed", top: pos.top, right: pos.right, zIndex: 901,
+              background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12,
+              boxShadow: "var(--shadow-lg)", padding: 4, minWidth: 168,
+              animation: "fadeUp 0.12s ease both",
+            }}
+          >
             {visible.map((item, i) => (
               <button
                 key={i}
@@ -46,7 +68,8 @@ export default function CardMenu({ items, size = 30 }) {
               </button>
             ))}
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );

@@ -287,7 +287,7 @@ export default function MuseumArchive({ archive, currentSetup, allCoffees, onVie
               <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
               <div style={{ fontSize: 10, color: "var(--muted)" }}>{works.length}</div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "20px 14px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "20px 14px" }}>
               {works.map((c) => (
                 <Piece
                   key={c.id}

@@ -773,7 +773,7 @@ function UpNext({ coffees, onPull, onViewFreezer }) {
 
 // Home shows today: equipment, the bag in play, what's next, and how your
 // grind is drifting. Everything historical lives in <Insights />.
-export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewResting, onViewInsights, upNext, onPull, recipeSlot, equipment }) {
+export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewResting, upNext, onPull, recipeSlot, equipment }) {
   const {
     activeCoffee,
     restingCoffees,
@@ -881,25 +881,12 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
         />
       )}
 
-      {/* Everything historical */}
-      {onViewInsights && (
-        <button
-          onClick={onViewInsights}
-          style={{
-            width: "100%", padding: "13px 0", background: "var(--card)",
-            border: "1px solid var(--border)", borderRadius: 14, fontSize: 12.5,
-            fontWeight: 600, color: "var(--accent-dark)", boxShadow: "var(--shadow-sm)",
-          }}
-        >
-          Insights — stats, favorites & latte art →
-        </button>
-      )}
     </div>
   );
 }
 
-// ─── Insights — the historical view (reached from Home) ───
-export function Insights({ stats, latteArt, onBack }) {
+// ─── Insights — the historical view (its own tab) ───
+export function Insights({ stats, latteArt }) {
   const {
     freezerGrams,
     freezerPortions,
@@ -919,12 +906,7 @@ export function Insights({ stats, latteArt, onBack }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>Insights</div>
-        <button onClick={onBack} style={{ padding: "6px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>
-          ← Home
-        </button>
-      </div>
+      <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>Insights</div>
 
       {freezerPortions > 0 && (
         <FreezerStats grams={freezerGrams} portions={freezerPortions} doses={freezerDoses} />

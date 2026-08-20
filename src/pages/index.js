@@ -295,6 +295,33 @@ function DoseTracker({ portion, dosesUsed, onChange, doseG = DEFAULT_DOSE_G }) {
   );
 }
 
+// Every portion of a bag at a glance: consumed struck through, the one in
+// play highlighted, the rest still in the freezer.
+function PortionChips({ coffee, activeHighlight = false }) {
+  if (!coffee?.portions?.length) return null;
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      {coffee.portions.map((p, i) => {
+        const used = i < coffee.portionIndex;
+        const isCur = i === coffee.portionIndex;
+        const cur = isCur && activeHighlight;
+        return (
+          <div key={i} style={{
+            padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600,
+            fontVariantNumeric: "tabular-nums",
+            background: used ? "#EDEAE7" : cur ? "var(--active-bg)" : isCur ? "var(--ice-bg)" : "#F8F5F1",
+            border: `1px solid ${used ? "#D5CEC6" : cur ? "var(--active)" : isCur ? "var(--ice)" : "var(--border)"}`,
+            color: used ? "#A09890" : cur ? "var(--active)" : isCur ? "var(--ice)" : "var(--muted)",
+            textDecoration: used ? "line-through" : "none",
+          }}>
+            {p.grams}g · {p.doses}d{p.buffer > 0 && !used ? ` +${p.buffer}` : ""}{cur ? " ●" : ""}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AltitudeSelector({ value, onChange }) {
   const options = [
     { key: "high", label: "High", desc: "1800m+" },
@@ -1973,15 +2000,16 @@ export default function Home() {
 
   const stats = useStats(coffees);
 
-  // Four places. Resting is a phase (it lives on Home); Scan is the "+" button.
+  // Five places. Resting is a phase (it lives on Home); Scan is the "+" button.
   const nav = [
     { key: "overview", icon: "◐", label: "Home" },
+    { key: "insights", icon: "◔", label: "Insights" },
     { key: "morning", icon: "☀", label: "Brew" },
     { key: "freezer", icon: "❄", label: "Freezer" },
     { key: "archive", icon: "◫", label: "Museum" },
   ];
   // Views without their own tab highlight their parent.
-  const activeTab = { resting: "overview", insights: "overview", scan: null }[view] ?? view;
+  const activeTab = { resting: "overview", scan: null }[view] ?? view;
 
   if (!loaded) return null;
 
@@ -2035,6 +2063,17 @@ export default function Home() {
                 />
               </div>
               <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>Your typical setting for a medium-roast washed coffee</div>
+              {stats.avgGrind !== null && Math.abs((baselineGrind ?? 0) - stats.avgGrind) >= 0.05 && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8, padding: "8px 10px", background: "var(--accent-light)", border: "1px solid var(--accent)", borderRadius: 8 }}>
+                  <span style={{ fontSize: 11, color: "var(--accent-dark)" }}>
+                    Your dialed-in average is <strong style={{ fontFamily: "var(--font-mono)" }}>{stats.avgGrind.toFixed(1)}</strong>
+                  </span>
+                  <button
+                    onClick={() => setBaselineGrind(stats.avgGrind.toFixed(1))}
+                    style={{ padding: "5px 12px", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}
+                  >Use it</button>
+                </div>
+              )}
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
                 <EquipmentPicker
                   machineId={machineId}
@@ -2081,7 +2120,6 @@ export default function Home() {
               }}
               onPullFromFreezer={() => setView("freezer")}
               onViewResting={() => setView("resting")}
-              onViewInsights={() => setView("insights")}
               upNext={frozen.slice(0, 2)}
               onPull={pull}
               recipeSlot={(() => {
@@ -2105,7 +2143,6 @@ export default function Home() {
             <Insights
               stats={stats}
               latteArt={{ pours: lattePours, createPour: createLattePour, deletePour: deleteLattePour }}
-              onBack={() => setView("overview")}
             />
           )}
 
@@ -2145,6 +2182,12 @@ export default function Home() {
                           </div>
                         </div>
                         {cur && <DoseTracker portion={cur} dosesUsed={active.dosesUsed} onChange={(d) => update(active.id, { dosesUsed: d })} doseG={active.doseG || DEFAULT_DOSE_G} />}
+                        {active.portions.length > 1 && (
+                          <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
+                            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--ice)", marginBottom: 5 }}>Portions</div>
+                            <PortionChips coffee={active} activeHighlight />
+                          </div>
+                        )}
                         <EspressoRecipe coffee={active} onChange={(patch) => update(active.id, patch)} baseline={baselineGrind} allCoffees={coffees} currentSetup={currentSetup} />
                         <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center" }}>
                           <button onClick={(e) => { e.stopPropagation(); finishPortion(active); }} style={{ flex: 1, padding: "10px 0", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 600 }}>
@@ -2317,6 +2360,11 @@ export default function Home() {
                         { label: "Archive", icon: "✓", onClick: () => archiveCoffee(c.id) },
                       ]} />
                     </div>
+                    {c.portions.length > 1 && (
+                      <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
+                        <PortionChips coffee={c} activeHighlight={c.isActiveRemaining} />
+                      </div>
+                    )}
                     <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
                       {!c.isActiveRemaining ? (
                         <button
