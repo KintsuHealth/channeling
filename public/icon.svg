@@ -1,21 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#6B4423"/>
-      <stop offset="100%" style="stop-color:#5C2D0E"/>
+      <stop offset="0%" style="stop-color:#7C4F2E"/>
+      <stop offset="100%" style="stop-color:#462C17"/>
     </linearGradient>
   </defs>
   <!-- Background -->
-  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
   <!-- Coffee stream/channel - three flowing lines -->
-  <g fill="none" stroke="#F5F0EB" stroke-width="28" stroke-linecap="round">
+  <g fill="none" stroke="#F7F5F1" stroke-width="24" stroke-linecap="round">
     <!-- Left stream -->
-    <path d="M156 140 Q156 256 180 320 Q204 384 180 440" opacity="0.7"/>
+    <path d="M164 148 Q164 256 186 316 Q208 376 186 432" opacity="0.55"/>
     <!-- Center stream -->
-    <path d="M256 100 Q256 220 256 300 Q256 380 256 440"/>
+    <path d="M256 112 Q256 220 256 300 Q256 376 256 432"/>
     <!-- Right stream -->
-    <path d="M356 140 Q356 256 332 320 Q308 384 332 440" opacity="0.7"/>
+    <path d="M348 148 Q348 256 326 316 Q304 376 326 432" opacity="0.55"/>
   </g>
-  <!-- Coffee drop at bottom -->
-  <ellipse cx="256" cy="456" rx="120" ry="24" fill="#F5F0EB" opacity="0.3"/>
+  <!-- Coffee pool at bottom -->
+  <ellipse cx="256" cy="452" rx="112" ry="20" fill="#F7F5F1" opacity="0.25"/>
 </svg>

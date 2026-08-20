@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { DEFAULT_DOSE_G } from "./portions";
-import { primaryRecipe } from "./recipes";
+import { primaryEspressoRecipe } from "./recipes";
 
 // Normalize string for grouping (lowercase, trim, strip accents)
 function normalizeForGrouping(str) {
@@ -108,16 +108,23 @@ export function useStats(coffees) {
         ? ratedArchive.reduce((sum, c) => sum + c.rating, 0) / ratedArchive.length
         : 0;
 
-    // Average grind setting from coffees with recipe data (uses primary recipe)
-    const coffeesWithGrind = all.filter((c) => primaryRecipe(c)?.grind);
+    // Average grind from espresso recipes only (pour-over numbers live on a
+    // different part of the dial and would poison the average)
+    const coffeesWithGrind = all.filter((c) => !isNaN(parseFloat(primaryEspressoRecipe(c)?.grind)));
     const avgGrind = coffeesWithGrind.length > 0
-      ? coffeesWithGrind.reduce((sum, c) => {
-          // Parse grind value (handle formats like "4.5", "4.5.0", etc.)
-          const grindStr = String(primaryRecipe(c).grind);
-          const grindNum = parseFloat(grindStr);
-          return sum + (isNaN(grindNum) ? 0 : grindNum);
-        }, 0) / coffeesWithGrind.length
+      ? coffeesWithGrind.reduce((sum, c) => sum + parseFloat(primaryEspressoRecipe(c).grind), 0) / coffeesWithGrind.length
       : null;
+
+    // Chronological series of settled espresso grinds — feeds the drift sparkline
+    const grindHistory = coffeesWithGrind
+      .map((c) => ({
+        grind: parseFloat(primaryEspressoRecipe(c).grind),
+        when: new Date(c.finishedAt || c.pulledAt || c.frozenAt || c.addedAt || 0).getTime(),
+        name: c.name,
+      }))
+      .filter((p) => p.when > 0)
+      .sort((a, b) => a.when - b.when)
+      .slice(-14);
 
     // ─── Estimated Days Left ───
     // Calculate average daily consumption based on archive
@@ -291,6 +298,7 @@ export function useStats(coffees) {
       totalDoses,
       avgRating,
       avgGrind,
+      grindHistory,
 
       // Favorites
       topRated,

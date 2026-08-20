@@ -1,63 +1,56 @@
-# ☕ Coffee Inventory
+# ☕ Expertso
 
-A personal coffee inventory tracker with AI-powered bag scanning, optimized freezer portioning, espresso recipe logging, and dose tracking.
+A personal coffee inventory tracker with AI-powered bag scanning, optimized freezer portioning, a learning grind predictor, espresso + pour-over recipe logging, and a museum-style archive.
 
 ## Features
 
 - **Scan** — Snap a photo of any coffee bag and the label is parsed automatically (country, variety, producer, roaster, process, weight, tasting notes, etc.)
-- **Smart portioning** — Bags are auto-divided into 5–7 dose portions (~90–126g) with remainder distributed evenly as buffer. Zero waste.
-- **Freezer management** — Track what's frozen, how many portions remain, when it was frozen
-- **Active bag** — Pull a portion, tap through doses as you use them, log your espresso recipe (dose/yield/time/grind)
-- **Archive** — Finished bags with ratings and recipes for future reference
+- **Smart portioning** — Bags are auto-divided into 5–7 dose portions with remainder distributed evenly as buffer. Zero waste.
+- **Freezer management** — Track what's frozen, portion-level pulls (choose exactly which portion, e.g. the odd 36g one), sorting, recipes-at-a-glance
+- **Now Brewing** — The home hero shows the active bag's art, characteristics and tasting notes, with the recipe stack and dose tracker
+- **Learning grind predictor** — Heuristics (roast/process/altitude/variety/freshness) plus a personal calibration that recency-weights your actual dial-ins, compares a new bag against the previous bag of the same coffee, and adjusts for freshness differences
+- **Equipment-aware** — Select your machine (Slayer Single Group, Linea Mini, Linea Micra, GS3, Breville Barista) and portafilter basket (Slayer stock 18g, Weber Unifilter 20g). Recipes are tagged with the setup they were dialed on; the app learns the grind delta between setups from paired shots and translates archived dial-ins to your current basket
+- **AI dial-in** — Machine-specific espresso guidance (pre-brew/full-throttle on the Slayer, paddle technique on a GS3 MP, grind/ratio/temp on the Lineas) and pour-over recipes for Origami, V60, Kalita and Chemex
+- **The Museum** — Finished bags hang as works in seasonal exhibitions: framed bag art, placards with origin, tenure (acquired → consumed), the dial-in story, and the grind translated to your current setup
 
 ## Stack
 
 - Next.js 14 (Pages Router)
-- Anthropic Claude API (vision for bag scanning)
-- localStorage for data persistence
-- No database needed — runs entirely client-side with one server-side API route for scanning
+- Anthropic Claude API (vision scanning + dial-in guidance)
+- Supabase (auth, Postgres, storage) — see `supabase-schema.sql`
+- Noto Sans JP / Noto Sans Mono design system
 
 ## Setup
 
 ```bash
-# Clone and install
-git clone <your-repo>
-cd coffee-inventory
 npm install
-
-# Add your Anthropic API key
-cp .env.local.example .env.local
-# Edit .env.local and add your key from https://console.anthropic.com/settings/keys
-
-# Run locally
+cp .env.local.example .env.local   # add ANTHROPIC_API_KEY + Supabase keys
 npm run dev
-# Open http://localhost:3000
 ```
+
+### Database migrations
+
+Run `supabase-schema.sql` once for a fresh project. For an existing database, the commented `-- Migration:` blocks at the bottom of that file must be run in the Supabase SQL editor. Latest:
+
+```sql
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS machine_id TEXT;
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS basket_id TEXT;
+```
+
+(Until it runs, equipment choices persist in localStorage.)
 
 ## Deploy to Vercel
 
 1. Push to GitHub
 2. Import in [Vercel](https://vercel.com/new)
-3. Add environment variable: `ANTHROPIC_API_KEY` = your key
+3. Add environment variables: `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 4. Deploy
 
-The app will be live at your Vercel URL. Add it to your phone's home screen for the full app experience.
+## Grind model
 
-## Portioning Logic
+Suggested grind = baseline + bean offset + personal calibration (+ equipment delta).
 
-Given a bag weight, the engine:
-1. Calculates total clean 18g doses
-2. Finds the optimal combination of 5, 6, or 7 dose portions (90g–126g)
-3. Distributes remainder grams evenly across all portions as buffer
-4. Buffer absorbs grinder retention, slight over-dosing, transfer loss
-
-Examples:
-| Bag | Portions | Buffer |
-|-----|----------|--------|
-| 250g | 2 × (134g, 116g) | ~8g each |
-| 300g | 3 × (112g, 94g, 94g) | ~4g each |
-| 500g | 4 × (129g, 129g, 129g, 112g) | ~3.5g each |
-
-## Data
-
-All data stored in browser localStorage. No server database, no accounts, no tracking. Your coffee, your data.
+- **Bean offset** — roast level, process, altitude, variety density, and a continuous days-off-roast degas curve, with a light-roast × ferment interaction term
+- **Personal calibration** — the residual between what the model predicted and where you actually settled, exponentially recency-weighted (half-life ~30 days) and quality-weighted (favorites/4★+ count more), so the model follows your averages as they drift
+- **Previous-bag anchor** — a new bag of a coffee you've dialed before starts from where the last bag settled, adjusted for the freshness difference between the two bags
+- **Equipment translation** — deltas between machine/basket setups start from physical priors (e.g. Unifilter 20g ≈ 0.2 coarser) and are replaced by learned paired-shot deltas as you dial the same coffees on both

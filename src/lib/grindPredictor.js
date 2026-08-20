@@ -2,7 +2,8 @@
  * Grind Predictor - Estimates starting grind settings based on bean characteristics
  */
 
-import { primaryRecipe } from "./recipes";
+import { primaryEspressoRecipe } from "./recipes";
+import { recipeEquipment, learnEquipmentDelta, DEFAULT_MACHINE_ID, DEFAULT_BASKET_ID } from "./equipment";
 
 // Variety density/extraction table (substring match, first hit wins).
 // Negative = finer (dense or delicate/aromatic), positive = coarser.
@@ -402,41 +403,69 @@ export function calculateSuggestedGrind(baseline, offset, calibration = 0) {
 /**
  * Learn a personal calibration from the grinds the user actually settled on.
  *
- * For each past coffee that has both a recorded recipe grind and a stored
+ * For each past coffee that has both a recorded espresso grind and a stored
  * prediction offset, the residual is (actualGrind − (baseline + predictedOffset)).
  * If the user systematically lands finer/coarser than the model predicts, the
- * averaged residual nudges future suggestions toward what has worked for them.
- * Favorited / highly-rated coffees are weighted more (those are "dialed in").
+ * weighted residual nudges future suggestions toward what has worked for them.
+ *
+ * The averaging is deliberately learning-shaped:
+ *  - exponential recency decay (half-life ~30 days) — the model follows your
+ *    averages as they drift, so a new grinder burr season or basket change
+ *    fades in rather than lurching;
+ *  - favorited / highly-rated coffees weigh more (those are truly "dialed in");
+ *  - residuals recorded on other equipment are first translated to the
+ *    current setup via the learned equipment delta, so switching to the
+ *    Unifilter doesn't poison the history (or vice versa).
  *
  * @param {Array} allCoffees
  * @param {number} baseline - user's baseline grind
+ * @param {{machineId, basketId}} [currentSetup] - equipment to calibrate for
  * @returns {{ calibration: number, sampleSize: number }}
  */
-export function calculatePersonalCalibration(allCoffees, baseline) {
+export function calculatePersonalCalibration(allCoffees, baseline, currentSetup = null) {
   const baseNum = typeof baseline === 'string' ? parseFloat(baseline) : Number(baseline);
   if (!Array.isArray(allCoffees) || isNaN(baseNum)) return { calibration: 0, sampleSize: 0 };
 
+  const setup = currentSetup || { machineId: DEFAULT_MACHINE_ID, basketId: DEFAULT_BASKET_ID };
+  const deltaCache = new Map();
+  const deltaTo = (from) => {
+    const key = `${from.machineId}::${from.basketId}`;
+    if (!deltaCache.has(key)) {
+      deltaCache.set(key, learnEquipmentDelta(allCoffees, from, setup).delta);
+    }
+    return deltaCache.get(key);
+  };
+
+  const now = Date.now();
+  const HALF_LIFE_DAYS = 30;
   const samples = [];
   for (const c of allCoffees) {
-    const grind = parseFloat(primaryRecipe(c)?.grind);
+    const rec = primaryEspressoRecipe(c);
+    const grindRaw = parseFloat(rec?.grind);
     const predOffset = typeof c?.grindOffsetPrediction === 'number'
       ? c.grindOffsetPrediction
       : parseFloat(c?.grindOffsetPrediction);
-    if (isNaN(grind) || isNaN(predOffset)) continue;
+    if (isNaN(grindRaw) || isNaN(predOffset)) continue;
+
+    // Normalize the recorded grind onto the current equipment before comparing.
+    const grind = grindRaw + deltaTo(recipeEquipment(rec));
     const residual = grind - (baseNum + predOffset);
-    // Ignore implausible residuals (likely different machine/baseline noise).
+    // Ignore implausible residuals (likely baseline noise or typos).
     if (Math.abs(residual) > 3) continue;
+
     const rating = Number(c.rating) || 0;
-    const weight = (c.favorite ? 2 : 1) + (rating >= 4 ? 1 : 0); // always >= 1
+    const quality = (c.favorite ? 2 : 1) + (rating >= 4 ? 1 : 0); // always >= 1
     const when = new Date(c.finishedAt || c.pulledAt || c.frozenAt || c.addedAt || 0).getTime();
-    samples.push({ residual, weight, when });
+    const ageDays = Math.max(0, (now - when) / 86400000);
+    const recency = Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
+    samples.push({ residual, weight: quality * Math.max(recency, 0.05), when });
   }
 
   if (samples.length < 2) return { calibration: 0, sampleSize: samples.length };
 
-  // Use the most recent ~10 dial-ins.
+  // Cap at the most recent ~12 dial-ins; decay already de-weights the tail.
   samples.sort((a, b) => b.when - a.when);
-  const recent = samples.slice(0, 10);
+  const recent = samples.slice(0, 12);
   const totalW = recent.reduce((s, x) => s + x.weight, 0);
   if (totalW <= 0) return { calibration: 0, sampleSize: recent.length };
   const weighted = recent.reduce((s, x) => s + x.residual * x.weight, 0) / totalW;
@@ -445,18 +474,15 @@ export function calculatePersonalCalibration(allCoffees, baseline) {
 }
 
 /**
- * Find previous grind settings for similar coffees
- * @param {Object} coffee - Current coffee
- * @param {Array} allCoffees - All coffees in inventory
- * @returns {{ grind: string, coffee: Object } | null}
+ * Find previous grind settings for the same coffee (name + roaster).
+ * @returns {{ grind: string, coffee: Object, recipe: Object } | null}
  */
 export function findPreviousGrindSettings(coffee, allCoffees) {
   if (!coffee || !allCoffees || allCoffees.length === 0) return null;
 
-  // Look for coffees with same name and/or roaster (excluding current)
   const matches = allCoffees.filter(c => {
     if (c.id === coffee.id) return false;
-    if (!primaryRecipe(c)?.grind) return false;
+    if (!primaryEspressoRecipe(c)?.grind) return false;
 
     const sameName = c.name && coffee.name &&
       c.name.toLowerCase() === coffee.name.toLowerCase();
@@ -468,16 +494,77 @@ export function findPreviousGrindSettings(coffee, allCoffees) {
 
   if (matches.length === 0) return null;
 
-  // Return most recent match
   const sorted = matches.sort((a, b) => {
     const dateA = new Date(a.finishedAt || a.pulledAt || a.frozenAt || 0);
     const dateB = new Date(b.finishedAt || b.pulledAt || b.frozenAt || 0);
     return dateB - dateA;
   });
 
+  const rec = primaryEspressoRecipe(sorted[0]);
+  return { grind: rec?.grind, coffee: sorted[0], recipe: rec };
+}
+
+/**
+ * Compare the bag being dialed in against the previous bag of the same coffee:
+ * where did the last one settle, and how does THIS bag differ (fresher/older
+ * roast, different batch)? Answers "you landed at 2.4 last time, but this bag
+ * is 10 days fresher off roast — start a touch coarser at 2.5".
+ *
+ * @returns {null | {
+ *   previous: Object, previousGrind: number, previousRecipe: Object,
+ *   freshnessAdjustment: number, roastDaysNow: number|null, roastDaysPrev: number|null,
+ *   suggestedGrind: number, explanation: string[]
+ * }}
+ */
+export function compareToPreviousBag(coffee, allCoffees, pulledAt = null) {
+  const prev = findPreviousGrindSettings(coffee, allCoffees);
+  const prevGrind = parseFloat(prev?.grind);
+  if (!prev || isNaN(prevGrind)) return null;
+
+  const explanation = [];
+
+  // Days off roast for each bag at the moment it was (or is being) dialed.
+  const dialMoment = (iso) => (iso ? new Date(iso).getTime() : Date.now());
+  const roastDays = (c, atIso) => {
+    if (!c.roastDate) return null;
+    const d = Math.floor((dialMoment(atIso) - new Date(c.roastDate).getTime()) / 86400000);
+    return isNaN(d) ? null : d;
+  };
+  const roastDaysNow = roastDays(coffee, pulledAt);
+  const roastDaysPrev = roastDays(prev.coffee, prev.coffee.pulledAt || prev.coffee.frozenAt);
+
+  // Freshness is the one factor that genuinely differs between two bags of the
+  // same coffee — take the difference of the degas curve at each bag's age.
+  let freshnessAdjustment = 0;
+  if (roastDaysNow !== null && roastDaysPrev !== null && roastDaysNow !== roastDaysPrev) {
+    freshnessAdjustment = Math.round(
+      (freshnessOffsetCurve(roastDaysNow) - freshnessOffsetCurve(roastDaysPrev)) * 20
+    ) / 20;
+    const diff = roastDaysNow - roastDaysPrev;
+    if (Math.abs(freshnessAdjustment) >= 0.05) {
+      explanation.push(
+        diff < 0
+          ? `This bag is ${-diff}d fresher off roast → ${freshnessAdjustment > 0 ? 'coarser' : 'finer'}`
+          : `This bag is ${diff}d further off roast → ${freshnessAdjustment > 0 ? 'coarser' : 'finer'}`
+      );
+    } else {
+      explanation.push('Similar age off roast — same grind should hold');
+    }
+  } else {
+    explanation.push(`Previous bag settled at ${prevGrind}`);
+  }
+
+  const suggestedGrind = Math.round((prevGrind + freshnessAdjustment) * 10) / 10;
+
   return {
-    grind: primaryRecipe(sorted[0])?.grind,
-    coffee: sorted[0]
+    previous: prev.coffee,
+    previousGrind: prevGrind,
+    previousRecipe: prev.recipe,
+    freshnessAdjustment,
+    roastDaysNow,
+    roastDaysPrev,
+    suggestedGrind,
+    explanation,
   };
 }
 

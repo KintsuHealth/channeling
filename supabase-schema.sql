@@ -116,6 +116,16 @@ CREATE TRIGGER on_auth_user_created
 -- ─── Migration: AI dial-in insight ───
 -- ALTER TABLE public.coffees ADD COLUMN IF NOT EXISTS dial_in_notes TEXT;
 
+-- ─── Migration: museum label cutouts ───
+-- Transparent-background version of the label photo, produced client-side.
+-- ALTER TABLE public.coffees ADD COLUMN IF NOT EXISTS label_cutout_url TEXT;
+
+-- ─── Migration: equipment (machine + portafilter basket) ───
+-- For an existing database, run this once in the SQL Editor. Until it runs,
+-- the app keeps equipment choices in localStorage.
+-- ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS machine_id TEXT;
+-- ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS basket_id TEXT;
+
 -- ─── Migration: latte art pours ───
 -- For an existing database, run the CREATE TABLE public.latte_art block above once
 -- in the SQL Editor (table + index + RLS enable + policy). Photos reuse the existing

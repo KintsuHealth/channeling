@@ -38,7 +38,7 @@ function MiniLabelCard({ coffee }) {
         fontWeight: 700,
         color: primary,
         lineHeight: 1.2,
-        fontFamily: "'Playfair Display', Georgia, serif",
+        fontFamily: "'Noto Sans JP', sans-serif",
         textAlign: "center",
         overflow: "hidden",
         display: "-webkit-box",
@@ -63,7 +63,7 @@ function QuarterBadge({ quarter, size = "normal" }) {
       fontSize: isSmall ? 10 : 11,
       fontWeight: 600,
       color: "var(--ice)",
-      fontFamily: "'DM Mono', monospace",
+      fontFamily: "'Noto Sans Mono', monospace",
     }}>
       {quarter}
     </span>
@@ -84,7 +84,7 @@ function RecipePreview({ coffee }) {
       border: "1px solid var(--accent-light)",
       borderRadius: 6,
       fontSize: 12,
-      fontFamily: "'DM Mono', monospace",
+      fontFamily: "'Noto Sans Mono', monospace",
     }}>
       <span style={{ fontWeight: 600 }}>{count > 1 ? (recipe.name || "Recipe") : "Recipe"}:</span>{" "}
       {recipe.dose && <span>{recipe.dose}g</span>}
@@ -187,7 +187,7 @@ export function DuplicateDetectionModal({
               <div style={{
                 fontSize: 16,
                 fontWeight: 700,
-                fontFamily: "'Playfair Display', serif",
+                fontFamily: "'Noto Sans JP', sans-serif",
                 color: "var(--text)",
                 marginBottom: 4,
                 lineHeight: 1.2,

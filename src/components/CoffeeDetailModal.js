@@ -66,7 +66,7 @@ function LabelCard({ coffee, size = "large" }) {
           fontWeight: 700,
           color: primary,
           lineHeight: 1.2,
-          fontFamily: "'Playfair Display', Georgia, serif",
+          fontFamily: "'Noto Sans JP', sans-serif",
           textAlign: "center",
         }}>
           {coffee.name || "Unnamed"}
@@ -112,7 +112,7 @@ const STATUS_LABELS = {
   done: { label: "Archived", color: "var(--done)", icon: "✓" },
 };
 
-export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive, onUpdate, baseline, allCoffees }) {
+export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive, onUpdate, baseline, allCoffees, currentSetup }) {
   const [showDialIn, setShowDialIn] = useState(false);
   if (!coffee) return null;
 
@@ -209,7 +209,7 @@ export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive, onUpdate
         <h2 style={{
           margin: "0 0 8px 0",
           fontSize: 24,
-          fontFamily: "'Playfair Display', serif",
+          fontFamily: "'Noto Sans JP', sans-serif",
           textAlign: "center",
         }}>
           {coffee.name || "Unnamed"}
@@ -283,36 +283,62 @@ export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive, onUpdate
 
         {/* Recipes */}
         {(() => {
-          const recipes = getRecipes(coffee).filter((r) => r.dose || r.grind || r.yield || r.totalTime || r.time);
+          const recipes = getRecipes(coffee).filter((r) => r.dose || r.grind || r.yield || r.waterG || r.totalTime || r.time);
           if (recipes.length === 0) return null;
           return (
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", marginBottom: 10 }}>
-                {recipes.length > 1 ? "Recipes" : "Espresso Recipe"}
+                {recipes.length > 1 ? "Recipes" : recipes[0].method === "pourover" ? "Pour-Over Recipe" : "Espresso Recipe"}
               </div>
               {recipes.map((r, ri) => (
                 <div key={r.id || ri} style={{
                   padding: "14px 16px",
                   marginBottom: ri < recipes.length - 1 ? 10 : 0,
-                  background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)",
-                  border: "1.5px solid var(--accent-light)",
+                  background: r.method === "pourover" ? "linear-gradient(135deg, #F6F9F4 0%, #EDF3EA 100%)" : "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)",
+                  border: `1.5px solid ${r.method === "pourover" ? "#CFDDC8" : "var(--accent-light)"}`,
                   borderRadius: 10,
                 }}>
-                  {recipes.length > 1 && (
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-dark)", marginBottom: 8 }}>{r.name || `Recipe ${ri + 1}`}</div>
+                  {(recipes.length > 1 || r.method === "pourover") && (
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-dark)", marginBottom: 8 }}>
+                      {r.name || `Recipe ${ri + 1}`}
+                      {r.method === "pourover" && r.brewer && <span style={{ fontWeight: 500, color: "var(--muted)" }}> · {r.brewer}</span>}
+                    </div>
                   )}
-                  <div style={{ display: "flex", gap: 16, fontSize: 16, fontFamily: "'DM Mono', monospace", fontWeight: 600, marginBottom: 8 }}>
+                  <div style={{ display: "flex", gap: 16, fontSize: 16, fontFamily: "'Noto Sans Mono', monospace", fontWeight: 600, marginBottom: 8 }}>
                     {r.dose && <span>{r.dose}g in</span>}
-                    {r.yield && <span>→ {r.yield}g out</span>}
+                    {r.method === "pourover"
+                      ? r.waterG && <span>→ {r.waterG}g water</span>
+                      : r.yield && <span>→ {r.yield}g out</span>}
                   </div>
-                  <div style={{ display: "flex", gap: 16, fontSize: 13, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>
-                    {(r.totalTime || r.time) && <span>{r.totalTime || r.time}s</span>}
+                  <div style={{ display: "flex", gap: 16, fontSize: 13, fontFamily: "'Noto Sans Mono', monospace", color: "var(--muted)", flexWrap: "wrap" }}>
+                    {(r.totalTime || r.time) && <span>{r.totalTime || r.time}{String(r.totalTime || r.time).includes(":") ? "" : "s"}</span>}
                     {r.grind && <span>@{r.grind}</span>}
                     {r.temp && <span>{r.temp}°{r.tempUnit || "C"}</span>}
+                    {r.method === "pourover" && r.bloomG && <span>bloom {r.bloomG}g{r.bloomTime ? `·${r.bloomTime}s` : ""}</span>}
+                    {r.method === "pourover" && r.pours && <span>{r.pours} pours</span>}
                   </div>
                   {r.notes && (
                     <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", fontSize: 12, fontStyle: "italic" }}>
                       "{r.notes}"
+                    </div>
+                  )}
+                  {r.shots?.length > 0 && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", marginBottom: 5 }}>
+                        Shot timeline · {r.shots.length}
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {r.shots.map((s, si) => {
+                          const color = s.verdict === "good" ? "var(--success)" : s.verdict === "bitter" ? "var(--error)" : "var(--star)";
+                          const label = s.verdict === "good" ? "Good" : s.verdict === "bitter" ? "Bitter" : "Sour";
+                          return (
+                            <span key={si} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", background: "var(--card)", border: `1.5px solid ${color}`, borderRadius: 6, fontSize: 10, fontFamily: "'Noto Sans Mono', monospace" }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: color }} />
+                              @{s.grind}{s.time ? ` · ${s.time}s` : ""} {label}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -325,7 +351,7 @@ export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive, onUpdate
         {coffee.dialInNotes && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", marginBottom: 10 }}>
-              🤖 Dial-in insight
+              ✦ Dial-in insight
             </div>
             <div style={{ padding: "12px 14px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12.5, lineHeight: 1.6, color: "var(--text)", whiteSpace: "pre-wrap" }}>
               {coffee.dialInNotes}
@@ -373,7 +399,7 @@ export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive, onUpdate
               fontSize: 14, fontWeight: 700, color: "var(--accent-dark)", cursor: "pointer",
             }}
           >
-            🤖 Dial in this coffee
+            ✦ Dial in this coffee
           </button>
         )}
 
@@ -438,6 +464,7 @@ export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive, onUpdate
         <DialInModal
           key={coffee.id}
           coffee={coffee}
+          currentSetup={currentSetup}
           baseline={baseline}
           allCoffees={allCoffees}
           onApply={(newRecs, insight) => onUpdate(coffee.id, { recipes: [...getRecipes(coffee), ...newRecs], espresso: null, dialInNotes: insight })}

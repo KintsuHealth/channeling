@@ -1,39 +1,73 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;800&family=Noto+Sans+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg: #F5F0EB;
+  /* Warm paper neutrals with a quiet espresso accent — calm, gallery-like */
+  --bg: #F7F5F1;
   --card: #FFFFFF;
-  --accent: #8B4513;
-  --accent-light: #C4956A;
-  --accent-dark: #5C2D0E;
-  --text: #2C1810;
-  --muted: #8C7B6F;
-  --border: #E8DDD3;
-  --success: #4A7C59;
-  --error: #A0522D;
-  --tag: #F0E6DA;
-  --star: #D4A054;
-  --star-off: #DDD5CB;
-  --ice: #7BA7C4;
-  --ice-bg: #EBF3F8;
-  --active: #E8763A;
-  --active-bg: #FDF3ED;
-  --done: #B8AFA6;
-  --buffer: #8B9E6B;
-  --buffer-bg: #F2F5ED;
+  --accent: #7C4F2E;
+  --accent-light: #EDDFD1;
+  --accent-dark: #462C17;
+  --text: #201B16;
+  --muted: #8C8378;
+  --border: #E8E2D9;
+  --success: #4E7D5B;
+  --error: #B4552D;
+  --tag: #F1EBE2;
+  --star: #D9A23F;
+  --star-off: #E4DDD3;
+  --ice: #5B8FB3;
+  --ice-bg: #EEF4F8;
+  --active: #DD7533;
+  --active-bg: #FBF2EA;
+  --done: #ABA49B;
+  --buffer: #839467;
+  --buffer-bg: #F2F5EC;
+
+  /* Elevation — soft, layered, Apple-like */
+  --shadow-sm: 0 1px 2px rgba(32, 27, 22, 0.05);
+  --shadow-md: 0 2px 8px rgba(32, 27, 22, 0.06), 0 1px 2px rgba(32, 27, 22, 0.04);
+  --shadow-lg: 0 12px 32px rgba(32, 27, 22, 0.10), 0 2px 8px rgba(32, 27, 22, 0.05);
+
+  --font-sans: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --font-mono: 'Noto Sans Mono', ui-monospace, 'SF Mono', monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html { -webkit-text-size-adjust: 100%; }
+
 body {
-  font-family: 'DM Sans', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'palt';
+  letter-spacing: 0.01em;
 }
 
-button { cursor: pointer; transition: opacity 0.15s; }
-button:hover { opacity: 0.85; }
-input:focus, textarea:focus { outline: none; border-color: var(--accent-light) !important; }
+button {
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s ease, transform 0.12s ease, background 0.15s ease;
+}
+button:hover { opacity: 0.88; }
+button:active { transform: scale(0.98); }
+
+input, select, textarea { font-family: inherit; }
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(124, 79, 46, 0.10);
+}
+
+::selection { background: rgba(124, 79, 46, 0.18); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Museum placard numbering & data readouts want even digits */
+.tnum { font-variant-numeric: tabular-nums; }

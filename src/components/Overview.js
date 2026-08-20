@@ -53,7 +53,7 @@ function LabelCard({ coffee, size = "medium" }) {
         </div>
       )}
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "4px 0" }}>
-        <div style={{ fontSize: s.nameSize, fontWeight: 700, color: primary, lineHeight: 1.2, fontFamily: "'Playfair Display', Georgia, serif", textAlign: "center", wordBreak: "break-word" }}>
+        <div style={{ fontSize: s.nameSize, fontWeight: 700, color: primary, lineHeight: 1.2, fontFamily: "'Noto Sans JP', sans-serif", textAlign: "center", wordBreak: "break-word" }}>
           {coffee.name || "Unnamed"}
         </div>
       </div>
@@ -94,7 +94,7 @@ function StatCard({ value, label, color, small }) {
         fontSize: small ? 18 : 22,
         fontWeight: 700,
         color: color || "var(--text)",
-        fontFamily: "'DM Mono', monospace",
+        fontFamily: "'Noto Sans Mono', monospace",
       }}>
         {value}
       </div>
@@ -196,26 +196,35 @@ function NowBrewing({ coffee, onUseDose, onPull, recipeSlot }) {
     );
   }
 
-  const { name, country, variety, roastLevel, rating, dosesLeft, gramsLeft, daysSincePulled, remainingPortions, isStale, bagColor, labelImage } = coffee;
+  const { name, roaster, country, region, variety, process, roastLevel, altitude, tastingNotes, dosesLeft, gramsLeft, daysSincePulled, remainingPortions, isStale, bagColor, labelImage } = coffee;
+
+  const chips = [
+    country && region ? `${region}, ${country}` : country || region,
+    variety,
+    process,
+    roastLevel && `${roastLevel} roast`,
+    altitude,
+  ].filter(Boolean);
 
   return (
     <div style={{
-      background: "var(--active-bg)",
-      border: "1.5px solid var(--active)",
-      borderRadius: 10,
-      padding: "16px 18px",
+      background: "var(--card)",
+      border: "1px solid var(--border)",
+      borderRadius: 16,
+      padding: "18px",
+      boxShadow: "var(--shadow-md)",
     }}>
       <div style={{ display: "flex", gap: 14 }}>
         {/* Label Card or Thumbnail */}
         {bagColor ? (
           <LabelCard coffee={coffee} size="medium" />
         ) : labelImage ? (
-          <LabelThumbnail src={labelImage} size={90} />
+          <LabelThumbnail src={labelImage} size={96} />
         ) : (
           <div style={{
             width: 90, height: 110,
             background: "linear-gradient(145deg, #F5EDE5, #E8DFD5)",
-            borderRadius: 8, border: "1px solid var(--border)",
+            borderRadius: 10, border: "1px solid var(--border)",
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
             padding: 8, textAlign: "center", flexShrink: 0,
           }}>
@@ -227,40 +236,60 @@ function NowBrewing({ coffee, onUseDose, onPull, recipeSlot }) {
         )}
 
         {/* Details */}
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {roaster && (
+            <div style={{ fontSize: 10, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 2 }}>
+              {roaster}
+            </div>
+          )}
           <div style={{
-            fontFamily: "'Playfair Display', serif",
-            fontSize: 17,
-            fontWeight: 700,
-            marginBottom: 4,
-            lineHeight: 1.2,
+            fontSize: 19,
+            fontWeight: 800,
+            marginBottom: 6,
+            lineHeight: 1.25,
+            letterSpacing: "-0.01em",
           }}>
             {name || "Unnamed Coffee"}
           </div>
-          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+            {chips.map((c, i) => (
+              <span key={i} style={{ fontSize: 10, fontWeight: 600, padding: "3px 8px", background: "var(--tag)", color: "var(--accent-dark)", borderRadius: 6 }}>
+                {c}
+              </span>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>
             {dosesLeft} dose{dosesLeft !== 1 ? "s" : ""} left · ~{gramsLeft}g
           </div>
-          <div style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "4px 10px",
-            background: isStale ? "rgba(220,80,40,0.1)" : "rgba(58,124,165,0.1)",
-            borderRadius: 4,
-            fontSize: 11,
-            fontWeight: 600,
-            color: isStale ? "var(--error)" : "var(--ice)",
-          }}>
-            Day {daysSincePulled} of thaw
-            {isStale && <span style={{ fontSize: 10, fontWeight: 700 }}>!</span>}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 9px",
+              background: isStale ? "rgba(180,85,45,0.1)" : "var(--ice-bg)",
+              borderRadius: 6, fontSize: 10.5, fontWeight: 600,
+              color: isStale ? "var(--error)" : "var(--ice)",
+            }}>
+              Day {daysSincePulled} of thaw{isStale && " !"}
+            </span>
+            {remainingPortions > 0 && (
+              <span style={{ fontSize: 10.5, color: "var(--ice)", fontWeight: 600 }}>
+                +{remainingPortions} portion{remainingPortions !== 1 ? "s" : ""} frozen
+              </span>
+            )}
           </div>
-          {remainingPortions > 0 && (
-            <div style={{ fontSize: 11, color: "var(--ice)", marginTop: 4 }}>
-              +{remainingPortions} portion{remainingPortions !== 1 ? "s" : ""} in freezer
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Tasting notes — the reason you bought the bag, front and center */}
+      {tastingNotes && (
+        <div style={{
+          marginTop: 12, padding: "10px 14px",
+          background: "var(--bg)", borderLeft: "3px solid var(--accent)",
+          borderRadius: "4px 10px 10px 4px",
+          fontSize: 12.5, lineHeight: 1.6, color: "var(--accent-dark)", fontStyle: "italic",
+        }}>
+          “{tastingNotes}”
+        </div>
+      )}
 
       {/* Recipe(s) for the bag being brewed — editable manager when provided,
           otherwise a read-only summary. */}
@@ -285,11 +314,11 @@ function NowBrewing({ coffee, onUseDose, onPull, recipeSlot }) {
                   {r.grind && (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 8px", background: "var(--accent-dark)", borderRadius: 5 }}>
                       <span style={{ fontSize: 8, fontWeight: 600, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Grind</span>
-                      <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "#fff" }}>{r.grind}</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Noto Sans Mono', monospace", color: "#fff" }}>{r.grind}</span>
                     </span>
                   )}
                 </div>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6, fontSize: 12, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6, fontSize: 12, fontFamily: "'Noto Sans Mono', monospace", color: "var(--text)" }}>
                   {(r.dose || r.yield) && <span>{r.dose || "—"}g → {r.yield || "—"}g</span>}
                   {(r.totalTime || r.time) && <span>{r.totalTime || r.time}s</span>}
                   {r.temp && <span>{r.temp}°{r.tempUnit || "C"}</span>}
@@ -628,6 +657,34 @@ function RecentActivity({ recentlyAdded, lastFinished }) {
   );
 }
 
+// ─── Grind Drift Sparkline ───
+// Single series: one hue, thin 2px line, endpoint dot, no grid — the hero
+// number beside it carries the value; per-point <title> gives hover detail.
+function GrindSparkline({ history, width = 120, height = 36 }) {
+  if (!history || history.length < 2) return null;
+  const pad = 4;
+  const gs = history.map((p) => p.grind);
+  const min = Math.min(...gs);
+  const max = Math.max(...gs);
+  const span = max - min || 1;
+  const x = (i) => pad + (i / (history.length - 1)) * (width - pad * 2);
+  const y = (g) => height - pad - ((g - min) / span) * (height - pad * 2);
+  const d = history.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.grind).toFixed(1)}`).join(" ");
+  const last = history[history.length - 1];
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Grind drift across last ${history.length} coffees, from ${history[0].grind} to ${last.grind}`}>
+      <path d={d} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(history.length - 1)} cy={y(last.grind)} r="3" fill="var(--accent-dark)" />
+      {history.map((p, i) => (
+        <circle key={i} cx={x(i)} cy={y(p.grind)} r="7" fill="transparent">
+          <title>{`${p.name || "Coffee"} — @${p.grind}`}</title>
+        </circle>
+      ))}
+    </svg>
+  );
+}
+
 // ─── Main Overview Component ───
 
 export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewResting, latteArt, recipeSlot }) {
@@ -645,6 +702,7 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
     totalDoses,
     avgRating,
     avgGrind,
+    grindHistory,
     topRated,
     topRoasters,
     topCountries,
@@ -686,32 +744,42 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
         />
       </div>
 
-      {/* Average Grind Quick Reference */}
+      {/* Average Grind + drift sparkline */}
       {avgGrind !== null && (
         <div style={{
-          background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)",
-          border: "1.5px solid var(--accent-light)",
-          borderRadius: 10,
+          background: "var(--card)",
+          border: "1px solid var(--border)",
+          borderRadius: 14,
           padding: "14px 18px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: 12,
+          boxShadow: "var(--shadow-sm)",
         }}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              Avg Grind Setting
+              Grind Drift
             </div>
             <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-              Based on your dialed-in coffees
+              {grindHistory && grindHistory.length >= 2
+                ? `Last ${grindHistory.length} dial-ins · avg ${avgGrind.toFixed(1)}`
+                : "Based on your dialed-in coffees"}
             </div>
           </div>
-          <div style={{
-            fontSize: 28,
-            fontWeight: 700,
-            fontFamily: "'DM Mono', monospace",
-            color: "var(--accent-dark)",
-          }}>
-            {avgGrind.toFixed(1)}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+            <GrindSparkline history={grindHistory} />
+            <div style={{
+              fontSize: 28,
+              fontWeight: 700,
+              fontFamily: "'Noto Sans Mono', monospace",
+              fontVariantNumeric: "tabular-nums",
+              color: "var(--accent-dark)",
+            }}>
+              {grindHistory && grindHistory.length > 0
+                ? grindHistory[grindHistory.length - 1].grind
+                : avgGrind.toFixed(1)}
+            </div>
           </div>
         </div>
       )}

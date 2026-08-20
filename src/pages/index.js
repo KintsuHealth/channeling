@@ -19,12 +19,15 @@ import {
   formatOffset,
   calculateSuggestedGrind,
   calculatePersonalCalibration,
-  findPreviousGrindSettings,
+  compareToPreviousBag,
   validatePrediction,
   parseAltitude
 } from "@/lib/grindPredictor";
 import { calculateDegasDays, getDegasSuggestion, getFreezeDate } from "@/lib/degasPredictor";
-import { getRecipes, primaryRecipe, emptyRecipe, newRecipeId } from "@/lib/recipes";
+import { getRecipes, primaryRecipe, emptyRecipe, newRecipeId, recipeMethod, POUROVER_BREWERS } from "@/lib/recipes";
+import { machineById, basketById, translateGrind, MACHINES, BASKETS } from "@/lib/equipment";
+import EquipmentPicker from "@/components/EquipmentPicker";
+import MuseumArchive from "@/components/MuseumArchive";
 
 const fmt = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
 const fmtFull = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "");
@@ -178,7 +181,7 @@ function LabelCard({ coffee, size = "medium" }) {
           fontWeight: 700,
           color: primary,
           lineHeight: 1.2,
-          fontFamily: "'Playfair Display', Georgia, serif",
+          fontFamily: "'Noto Sans JP', sans-serif",
           textAlign: "center",
           wordBreak: "break-word",
           hyphens: "auto",
@@ -314,42 +317,76 @@ function AltitudeSelector({ value, onChange }) {
   );
 }
 
-function GrindPredictionCard({ coffee, baseline, allCoffees, compact = false }) {
+function GrindPredictionCard({ coffee, baseline, allCoffees, currentSetup, compact = false }) {
   const prediction = useMemo(() => calculateGrindOffset(coffee, coffee?.pulledAt), [coffee]);
-  const calibration = useMemo(() => calculatePersonalCalibration(allCoffees || [], baseline), [allCoffees, baseline]);
+  const calibration = useMemo(
+    () => calculatePersonalCalibration(allCoffees || [], baseline, currentSetup),
+    [allCoffees, baseline, currentSetup]
+  );
   const suggested = baseline !== null ? calculateSuggestedGrind(baseline, prediction.offset, calibration.calibration) : null;
-  const previous = useMemo(() => findPreviousGrindSettings(coffee, allCoffees || []), [coffee, allCoffees]);
+  // How does THIS bag relate to the previous bag of the same coffee?
+  const prevBag = useMemo(
+    () => compareToPreviousBag(coffee, allCoffees || [], coffee?.pulledAt),
+    [coffee, allCoffees]
+  );
+  // If the previous bag was dialed on different equipment, translate it.
+  const prevTranslated = useMemo(() => {
+    if (!prevBag?.previousRecipe || !currentSetup) return null;
+    return translateGrind(prevBag.previousRecipe, currentSetup, allCoffees || []);
+  }, [prevBag, currentSetup, allCoffees]);
 
   if (!prediction || prediction.rationale.length === 0) return null;
 
   const confColors = { high: "var(--success)", medium: "var(--active)", low: "var(--muted)" };
+  // Anchor on the previous bag when we have one (strongest signal), else the model.
+  const anchorGrind = prevBag
+    ? (prevTranslated
+        ? Math.round((prevTranslated.grind + prevBag.freshnessAdjustment) * 10) / 10
+        : prevBag.suggestedGrind)
+    : null;
 
   return (
-    <div style={{ padding: compact ? "10px 12px" : "12px 14px", background: "#F8F5F2", borderRadius: 8, border: "1px solid var(--border)", marginTop: compact ? 8 : 12 }}>
+    <div style={{ padding: compact ? "10px 12px" : "12px 14px", background: "#F8F5F1", borderRadius: 12, border: "1px solid var(--border)", marginTop: compact ? 8 : 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)" }}>Grind Prediction</div>
         <div style={{ fontSize: 9, fontWeight: 600, color: confColors[prediction.confidence], textTransform: "uppercase" }}>{prediction.confidence} conf</div>
       </div>
       <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>{formatOffset(prediction.offset)}</div>
-      {suggested !== null && (
+      {anchorGrind !== null ? (
         <div style={{ fontSize: 13, color: "var(--accent-dark)", fontWeight: 600, marginBottom: 6 }}>
-          Suggested starting grind: <span style={{ fontFamily: "'DM Mono', monospace" }}>{suggested}</span>
+          Start at <span style={{ fontFamily: "var(--font-mono)", fontSize: 15 }}>{anchorGrind}</span>
+          {suggested !== null && Math.abs(suggested - anchorGrind) >= 0.2 && (
+            <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 11 }}> (model alone: {suggested})</span>
+          )}
+        </div>
+      ) : suggested !== null && (
+        <div style={{ fontSize: 13, color: "var(--accent-dark)", fontWeight: 600, marginBottom: 6 }}>
+          Suggested starting grind: <span style={{ fontFamily: "var(--font-mono)", fontSize: 15 }}>{suggested}</span>
+        </div>
+      )}
+      {prevBag && (
+        <div style={{ marginBottom: 6, padding: "7px 9px", background: "var(--ice-bg)", borderRadius: 8, border: "1px solid var(--ice)" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--ice)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>vs previous bag</div>
+          <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.5 }}>
+            Settled at <span style={{ fontWeight: 700, fontFamily: "var(--font-mono)" }}>{prevBag.previousGrind}</span>
+            {prevTranslated && (
+              <span> (≈{prevTranslated.grind} on your {basketById(currentSetup.basketId).short})</span>
+            )}
+          </div>
+          {prevBag.explanation.map((e, i) => (
+            <div key={i} style={{ fontSize: 10, color: "var(--muted)", marginTop: 1 }}>{e}</div>
+          ))}
         </div>
       )}
       {suggested !== null && calibration.calibration !== 0 && (
         <div style={{ fontSize: 10, color: "var(--ice)", marginBottom: 6 }}>
-          Adjusted {calibration.calibration > 0 ? "coarser" : "finer"} from your past {calibration.sampleSize} dial-in{calibration.sampleSize !== 1 ? "s" : ""}
-        </div>
-      )}
-      {previous && (
-        <div style={{ fontSize: 11, color: "var(--ice)", fontWeight: 500, marginBottom: 6 }}>
-          You dialed this in at <span style={{ fontWeight: 700 }}>{previous.grind}</span> last time
+          Model adjusted {calibration.calibration > 0 ? "coarser" : "finer"} by {Math.abs(calibration.calibration).toFixed(1)} — learned from your last {calibration.sampleSize} dial-in{calibration.sampleSize !== 1 ? "s" : ""}
         </div>
       )}
       {!compact && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
           {prediction.rationale.map((r, i) => (
-            <span key={i} style={{ fontSize: 9, padding: "3px 7px", background: "#EDE8E2", borderRadius: 4, color: "var(--muted)" }}>{r}</span>
+            <span key={i} style={{ fontSize: 9, padding: "3px 7px", background: "#EDE8E1", borderRadius: 5, color: "var(--muted)" }}>{r}</span>
           ))}
         </div>
       )}
@@ -378,100 +415,217 @@ function PredictionValidationBadge({ predicted, actual }) {
 // Editor for a single recipe — name + brew fields. Self-contained local state.
 const BEVERAGES = ["Espresso", "Ristretto", "Lungo", "Flat White", "Cortado", "Cappuccino", "Latte", "Macchiato", "Americano"];
 
-function RecipeEditor({ value, onSave, onCancel }) {
-  const [loc, setLoc] = useState(value || emptyRecipe());
+function RecipeEditor({ value, onSave, onCancel, currentSetup }) {
+  const [loc, setLoc] = useState(() => {
+    const base = value || emptyRecipe();
+    // New espresso recipes are tagged with the equipment they're dialed on.
+    if (recipeMethod(base) === "espresso" && !base.machineId && currentSetup) {
+      return { ...base, machineId: currentSetup.machineId, basketId: currentSetup.basketId };
+    }
+    return base;
+  });
   const [customName, setCustomName] = useState(!!(value?.name && !BEVERAGES.includes(value.name)));
   const tempUnit = loc.tempUnit || "C";
   const setTempUnit = (u) => setLoc({ ...loc, tempUnit: u });
+  const method = recipeMethod(loc);
+  const setMethod = (m) => {
+    if (m === recipeMethod(loc)) return;
+    setLoc({
+      ...loc,
+      method: m,
+      brewer: m === "pourover" ? (loc.brewer || "origami") : "",
+      ...(m === "pourover"
+        ? { machineId: "", basketId: "" }
+        : currentSetup
+          ? { machineId: currentSetup.machineId, basketId: currentSetup.basketId }
+          : {}),
+    });
+  };
 
-  const inputStyle = { width: "100%", padding: "5px 6px", border: "1px solid var(--border)", borderRadius: 4, fontSize: 12, background: "#fff", color: "var(--text)", fontFamily: "'DM Mono', monospace" };
+  const inputStyle = { width: "100%", padding: "5px 6px", border: "1px solid var(--border)", borderRadius: 4, fontSize: 12, background: "#fff", color: "var(--text)", fontFamily: "'Noto Sans Mono', monospace" };
   const labelStyle = { fontSize: 9, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 2 };
   const sectionStyle = { marginBottom: 10, padding: "8px", background: "#fff", borderRadius: 6, border: "1px solid var(--border)" };
   const sectionTitleStyle = { fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 };
 
   return (
     <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10, padding: 12, background: "#FAF7F4", borderRadius: 8, border: "1px solid var(--border)" }}>
-      {/* Beverage */}
-      <div style={{ marginBottom: 10 }}>
-        <label style={labelStyle}>Beverage</label>
-        <select
-          value={customName ? "__custom__" : (BEVERAGES.includes(loc.name) ? loc.name : "")}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === "__custom__") { setCustomName(true); if (BEVERAGES.includes(loc.name)) setLoc({ ...loc, name: "" }); }
-            else { setCustomName(false); setLoc({ ...loc, name: v }); }
-          }}
-          style={{ ...inputStyle, fontFamily: "inherit", fontWeight: 600 }}
-        >
-          <option value="">Select…</option>
-          {BEVERAGES.map((b) => <option key={b} value={b}>{b}</option>)}
-          <option value="__custom__">Other…</option>
-        </select>
-        {customName && (
-          <input value={loc.name || ""} onChange={(e) => setLoc({ ...loc, name: e.target.value })} placeholder="Custom name" style={{ ...inputStyle, fontFamily: "inherit", fontWeight: 600, marginTop: 6 }} />
-        )}
+      {/* Brew method */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+        {[["espresso", "Espresso"], ["pourover", "Pour-Over"]].map(([m, label]) => (
+          <button key={m} type="button" onClick={() => setMethod(m)} style={{
+            flex: 1, padding: "7px 0", borderRadius: 8, fontSize: 11, fontWeight: 700,
+            background: method === m ? "var(--accent-dark)" : "#fff",
+            color: method === m ? "#fff" : "var(--muted)",
+            border: `1.5px solid ${method === m ? "var(--accent-dark)" : "var(--border)"}`,
+          }}>{label}</button>
+        ))}
       </div>
 
-      {/* Dose & Yield */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-        <div>
-          <label style={labelStyle}>Dose (g)</label>
-          <input value={loc.dose || ""} onChange={(e) => setLoc({ ...loc, dose: e.target.value })} placeholder="18" style={inputStyle} />
+      {/* Beverage / Brewer */}
+      {method === "espresso" ? (
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Beverage</label>
+          <select
+            value={customName ? "__custom__" : (BEVERAGES.includes(loc.name) ? loc.name : "")}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "__custom__") { setCustomName(true); if (BEVERAGES.includes(loc.name)) setLoc({ ...loc, name: "" }); }
+              else { setCustomName(false); setLoc({ ...loc, name: v }); }
+            }}
+            style={{ ...inputStyle, fontFamily: "inherit", fontWeight: 600 }}
+          >
+            <option value="">Select…</option>
+            {BEVERAGES.map((b) => <option key={b} value={b}>{b}</option>)}
+            <option value="__custom__">Other…</option>
+          </select>
+          {customName && (
+            <input value={loc.name || ""} onChange={(e) => setLoc({ ...loc, name: e.target.value })} placeholder="Custom name" style={{ ...inputStyle, fontFamily: "inherit", fontWeight: 600, marginTop: 6 }} />
+          )}
         </div>
-        <div>
-          <label style={labelStyle}>Yield (g)</label>
-          <input value={loc.yield || ""} onChange={(e) => setLoc({ ...loc, yield: e.target.value })} placeholder="36" style={inputStyle} />
+      ) : (
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Brewer</label>
+          <select
+            value={loc.brewer || "origami"}
+            onChange={(e) => {
+              const brewer = e.target.value;
+              const bn = POUROVER_BREWERS.find((b) => b.id === brewer)?.name || "";
+              // Keep the auto-name in sync unless the user typed their own.
+              const wasAuto = !loc.name || POUROVER_BREWERS.some((b) => b.name === loc.name);
+              setLoc({ ...loc, brewer, name: wasAuto ? bn : loc.name });
+            }}
+            style={{ ...inputStyle, fontFamily: "inherit", fontWeight: 600 }}
+          >
+            {POUROVER_BREWERS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <input value={loc.name || ""} onChange={(e) => setLoc({ ...loc, name: e.target.value })} placeholder="Recipe name (optional)" style={{ ...inputStyle, fontFamily: "inherit", fontWeight: 600, marginTop: 6 }} />
         </div>
-      </div>
+      )}
 
-      {/* Time Section */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Time</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+      {/* Dose & output */}
+      {method === "espresso" ? (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
           <div>
-            <label style={labelStyle}>Pre-infusion (s)</label>
-            <input value={loc.preInfuse || ""} onChange={(e) => {
-              const preInfuse = e.target.value;
-              const total = (parseFloat(preInfuse) || 0) + (parseFloat(loc.brewTime) || 0);
-              setLoc({ ...loc, preInfuse, totalTime: total > 0 ? String(total) : "" });
-            }} placeholder="5" style={inputStyle} />
+            <label style={labelStyle}>Dose (g)</label>
+            <input value={loc.dose || ""} onChange={(e) => setLoc({ ...loc, dose: e.target.value })} placeholder="18" style={inputStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Brew (s)</label>
-            <input value={loc.brewTime || ""} onChange={(e) => {
-              const brewTime = e.target.value;
-              const total = (parseFloat(loc.preInfuse) || 0) + (parseFloat(brewTime) || 0);
-              setLoc({ ...loc, brewTime, totalTime: total > 0 ? String(total) : "" });
-            }} placeholder="23" style={inputStyle} />
+            <label style={labelStyle}>Yield (g)</label>
+            <input value={loc.yield || ""} onChange={(e) => setLoc({ ...loc, yield: e.target.value })} placeholder="36" style={inputStyle} />
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+          <div>
+            <label style={labelStyle}>Dose (g)</label>
+            <input value={loc.dose || ""} onChange={(e) => setLoc({ ...loc, dose: e.target.value })} placeholder="20" style={inputStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Total (s)</label>
-            <div style={{ ...inputStyle, background: "#F5F2EF", color: "var(--accent-dark)", fontWeight: 600, display: "flex", alignItems: "center" }}>
-              {loc.totalTime || "—"}
+            <label style={labelStyle}>Water (g)</label>
+            <input value={loc.waterG || ""} onChange={(e) => setLoc({ ...loc, waterG: e.target.value })} placeholder="320" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Ratio</label>
+            <div style={{ ...inputStyle, background: "#F5F2EE", color: "var(--accent-dark)", fontWeight: 600, display: "flex", alignItems: "center" }}>
+              {(() => {
+                const d = parseFloat(loc.dose), w = parseFloat(loc.waterG);
+                return d > 0 && w > 0 ? `1:${(w / d).toFixed(1)}` : "—";
+              })()}
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Time Section */}
+      {method === "espresso" ? (
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}>Time</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+            <div>
+              <label style={labelStyle}>Pre-infusion (s)</label>
+              <input value={loc.preInfuse || ""} onChange={(e) => {
+                const preInfuse = e.target.value;
+                const total = (parseFloat(preInfuse) || 0) + (parseFloat(loc.brewTime) || 0);
+                setLoc({ ...loc, preInfuse, totalTime: total > 0 ? String(total) : "" });
+              }} placeholder="5" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Brew (s)</label>
+              <input value={loc.brewTime || ""} onChange={(e) => {
+                const brewTime = e.target.value;
+                const total = (parseFloat(loc.preInfuse) || 0) + (parseFloat(brewTime) || 0);
+                setLoc({ ...loc, brewTime, totalTime: total > 0 ? String(total) : "" });
+              }} placeholder="23" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Total (s)</label>
+              <div style={{ ...inputStyle, background: "#F5F2EE", color: "var(--accent-dark)", fontWeight: 600, display: "flex", alignItems: "center" }}>
+                {loc.totalTime || "—"}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}>Pour Structure</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
+            <div>
+              <label style={labelStyle}>Bloom (g)</label>
+              <input value={loc.bloomG || ""} onChange={(e) => setLoc({ ...loc, bloomG: e.target.value })} placeholder="45" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Bloom (s)</label>
+              <input value={loc.bloomTime || ""} onChange={(e) => setLoc({ ...loc, bloomTime: e.target.value })} placeholder="35" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Pours</label>
+              <input value={loc.pours || ""} onChange={(e) => setLoc({ ...loc, pours: e.target.value })} placeholder="3" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Total (m:s)</label>
+              <input value={loc.totalTime || ""} onChange={(e) => setLoc({ ...loc, totalTime: e.target.value })} placeholder="3:00" style={inputStyle} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Grinder Section */}
       <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Grinder</div>
+        <div style={sectionTitleStyle}>Grinder{method === "pourover" ? " (coarser range)" : ""}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
           <div>
             <label style={labelStyle}>Grind Setting</label>
-            <input value={loc.grind || ""} onChange={(e) => setLoc({ ...loc, grind: e.target.value })} placeholder="2.5" style={inputStyle} />
+            <input value={loc.grind || ""} onChange={(e) => setLoc({ ...loc, grind: e.target.value })} placeholder={method === "pourover" ? "7.0" : "2.5"} style={inputStyle} />
           </div>
-          <div>
-            <label style={labelStyle}>Feed Speed</label>
-            <select value={loc.feedSpeed || ""} onChange={(e) => setLoc({ ...loc, feedSpeed: e.target.value })} style={{ ...inputStyle, fontFamily: "inherit" }}>
-              <option value="">Select...</option>
-              <option value="slow">Slow</option>
-              <option value="medium">Medium</option>
-              <option value="fast">Fast</option>
-              <option value="auto">Auto</option>
-            </select>
-          </div>
+          {method === "espresso" && (
+            <div>
+              <label style={labelStyle}>Feed Speed</label>
+              <select value={loc.feedSpeed || ""} onChange={(e) => setLoc({ ...loc, feedSpeed: e.target.value })} style={{ ...inputStyle, fontFamily: "inherit" }}>
+                <option value="">Select...</option>
+                <option value="slow">Slow</option>
+                <option value="medium">Medium</option>
+                <option value="fast">Fast</option>
+                <option value="auto">Auto</option>
+              </select>
+            </div>
+          )}
         </div>
+        {method === "espresso" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
+            <div>
+              <label style={labelStyle}>Machine</label>
+              <select value={loc.machineId || ""} onChange={(e) => setLoc({ ...loc, machineId: e.target.value })} style={{ ...inputStyle, fontFamily: "inherit" }}>
+                {MACHINES.map((m) => <option key={m.id} value={m.id}>{m.short}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Basket</label>
+              <select value={loc.basketId || ""} onChange={(e) => setLoc({ ...loc, basketId: e.target.value })} style={{ ...inputStyle, fontFamily: "inherit" }}>
+                {BASKETS.map((b) => <option key={b.id} value={b.id}>{b.short}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Temperature Section */}
@@ -501,12 +655,70 @@ function RecipeEditor({ value, onSave, onCancel }) {
   );
 }
 
-// Read-only hero card for a single saved recipe. Tap to edit.
-function RecipeCard({ recipe, onEdit, onDelete }) {
+// Per-shot verdicts. Status colors ship with a label, never color alone.
+const SHOT_VERDICTS = [
+  { key: "sour", label: "Sour", hint: "under — go finer", color: "var(--star)" },
+  { key: "good", label: "Good", hint: "keep it", color: "var(--success)" },
+  { key: "bitter", label: "Bitter", hint: "over — go coarser", color: "var(--error)" },
+];
+
+// Inline quick shot log: grind (prefilled from the recipe), time, verdict.
+function ShotLogger({ recipe, onLog, onCancel }) {
+  const [grind, setGrind] = useState(recipe.grind || "");
+  const [time, setTime] = useState("");
+  const [verdict, setVerdict] = useState("good");
+  const inputStyle = { width: "100%", padding: "6px 8px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, background: "#fff", fontFamily: "var(--font-mono)" };
   return (
-    <div onClick={(e) => { e.stopPropagation(); onEdit(); }} style={{ marginTop: 12, padding: 14, background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)", borderRadius: 10, border: "2px solid var(--accent-light, #E8D5C4)", cursor: "pointer", boxShadow: "0 2px 8px rgba(92,45,14,0.08)" }}>
+    <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8, padding: "10px 12px", background: "#fff", border: "1px solid var(--border)", borderRadius: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8 }}>
+        <div>
+          <label style={{ fontSize: 9, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 2 }}>Grind</label>
+          <input value={grind} onChange={(e) => setGrind(e.target.value)} placeholder="2.5" style={inputStyle} />
+        </div>
+        <div>
+          <label style={{ fontSize: 9, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 2 }}>Time (s)</label>
+          <input value={time} onChange={(e) => setTime(e.target.value)} placeholder="28" style={inputStyle} />
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+        {SHOT_VERDICTS.map((v) => (
+          <button key={v.key} type="button" onClick={() => setVerdict(v.key)} title={v.hint} style={{
+            flex: 1, padding: "6px 0", borderRadius: 7, fontSize: 11, fontWeight: 700,
+            background: verdict === v.key ? v.color : "#fff",
+            color: verdict === v.key ? "#fff" : "var(--muted)",
+            border: `1.5px solid ${verdict === v.key ? v.color : "var(--border)"}`,
+          }}>{v.label}</button>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+        <button onClick={onCancel} style={{ padding: "6px 12px", background: "none", border: "1px solid var(--border)", borderRadius: 6, fontSize: 11, color: "var(--muted)" }}>Cancel</button>
+        <button
+          onClick={() => onLog({ at: new Date().toISOString(), grind, time, verdict })}
+          disabled={!grind}
+          style={{ padding: "6px 14px", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, opacity: grind ? 1 : 0.5 }}
+        >Log shot</button>
+      </div>
+    </div>
+  );
+}
+
+// Read-only hero card for a single saved recipe. Tap to edit.
+function RecipeCard({ recipe, onEdit, onDelete, onLogShot, currentSetup, allCoffees }) {
+  const [logging, setLogging] = useState(false);
+  const isPourover = recipeMethod(recipe) === "pourover";
+  const brewerName = isPourover ? (POUROVER_BREWERS.find((b) => b.id === recipe.brewer)?.name || "Pour-Over") : null;
+  const translated = !isPourover && currentSetup ? translateGrind(recipe, currentSetup, allCoffees || []) : null;
+  return (
+    <div onClick={(e) => { e.stopPropagation(); onEdit(); }} style={{ marginTop: 12, padding: 14, background: isPourover ? "linear-gradient(135deg, #F6F9F4 0%, #EDF3EA 100%)" : "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)", borderRadius: 14, border: `2px solid ${isPourover ? "#CFDDC8" : "var(--accent-light, #E8D5C4)"}`, cursor: "pointer", boxShadow: "var(--shadow-md)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, gap: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-dark)" }}>{recipe.name || "Recipe"}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-dark)", display: "flex", alignItems: "center", gap: 6 }}>
+          {recipe.name || (isPourover ? brewerName : "Recipe")}
+          {isPourover && (
+            <span style={{ padding: "1px 7px", background: "var(--buffer-bg)", border: "1px solid var(--buffer)", color: "var(--buffer)", borderRadius: 4, fontSize: 8.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              {brewerName}
+            </span>
+          )}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)" }}>tap to edit</div>
           <button onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Delete recipe" style={{ padding: "2px 8px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 5, fontSize: 11, lineHeight: 1.4 }}>✕</button>
@@ -515,11 +727,16 @@ function RecipeCard({ recipe, onEdit, onDelete }) {
 
       {/* Grind Setting - Hero Element */}
       {(recipe.grind || recipe.feedSpeed) && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, padding: "10px 12px", background: "var(--accent-dark)", borderRadius: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, padding: "10px 12px", background: "var(--accent-dark)", borderRadius: 10 }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Grind</div>
-          <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "#fff", letterSpacing: "-1px" }}>
+          <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Noto Sans Mono', monospace", color: "#fff", letterSpacing: "-1px" }}>
             {recipe.grind || "—"}
           </div>
+          {translated && (
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.85)", lineHeight: 1.4 }}>
+              ≈{translated.grind} on your<br />{basketById(currentSetup.basketId).short}
+            </div>
+          )}
           {recipe.feedSpeed && (
             <div style={{ marginLeft: "auto", padding: "4px 10px", background: "rgba(255,255,255,0.2)", borderRadius: 4, fontSize: 11, fontWeight: 600, color: "#fff", textTransform: "capitalize" }}>
               {recipe.feedSpeed}
@@ -528,24 +745,53 @@ function RecipeCard({ recipe, onEdit, onDelete }) {
         </div>
       )}
 
+      {/* Equipment line (espresso only) */}
+      {!isPourover && (recipe.machineId || recipe.basketId) && (
+        <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 8 }}>
+          {machineById(recipe.machineId || "slayer-single").short} · {basketById(recipe.basketId || "slayer-18").short}
+        </div>
+      )}
+
       {/* Recipe Details Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-        {/* Dose/Yield */}
-        {(recipe.dose || recipe.yield) && (
-          <div style={{ padding: "8px 10px", background: "rgba(255,255,255,0.6)", borderRadius: 6, border: "1px solid rgba(0,0,0,0.06)" }}>
+        {/* Dose/Yield or Dose/Water */}
+        {(recipe.dose || recipe.yield || recipe.waterG) && (
+          <div style={{ padding: "8px 10px", background: "rgba(255,255,255,0.6)", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
             <div style={{ fontSize: 9, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>Ratio</div>
-            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
-              {recipe.dose || "—"}g → {recipe.yield || "—"}g
+            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Noto Sans Mono', monospace", color: "var(--text)" }}>
+              {isPourover
+                ? `${recipe.dose || "—"}g → ${recipe.waterG || "—"}g`
+                : `${recipe.dose || "—"}g → ${recipe.yield || "—"}g`}
+            </div>
+            {isPourover && recipe.dose && recipe.waterG && (
+              <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+                1:{(parseFloat(recipe.waterG) / parseFloat(recipe.dose)).toFixed(1)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Pour structure (pour-over) */}
+        {isPourover && (recipe.bloomG || recipe.pours) && (
+          <div style={{ padding: "8px 10px", background: "rgba(255,255,255,0.6)", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+            <div style={{ fontSize: 9, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>Pours</div>
+            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Noto Sans Mono', monospace", color: "var(--text)" }}>
+              {recipe.bloomG ? `${recipe.bloomG}g bloom` : "—"}
+            </div>
+            <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+              {recipe.bloomTime && <span>{recipe.bloomTime}s bloom</span>}
+              {recipe.bloomTime && recipe.pours && <span> · </span>}
+              {recipe.pours && <span>{recipe.pours} pour{recipe.pours !== "1" ? "s" : ""}</span>}
             </div>
           </div>
         )}
 
         {/* Time */}
         {recipe.totalTime && (
-          <div style={{ padding: "8px 10px", background: "rgba(255,255,255,0.6)", borderRadius: 6, border: "1px solid rgba(0,0,0,0.06)" }}>
+          <div style={{ padding: "8px 10px", background: "rgba(255,255,255,0.6)", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
             <div style={{ fontSize: 9, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>Time</div>
-            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
-              {recipe.totalTime}s
+            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Noto Sans Mono', monospace", color: "var(--text)" }}>
+              {recipe.totalTime}{String(recipe.totalTime).includes(":") ? "" : "s"}
             </div>
             {(recipe.preInfuse || recipe.brewTime) && (
               <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
@@ -561,7 +807,7 @@ function RecipeCard({ recipe, onEdit, onDelete }) {
         {recipe.temp && (
           <div style={{ padding: "8px 10px", background: "rgba(255,255,255,0.6)", borderRadius: 6, border: "1px solid rgba(0,0,0,0.06)" }}>
             <div style={{ fontSize: 9, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>Temp</div>
-            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
+            <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Noto Sans Mono', monospace", color: "var(--text)" }}>
               {recipe.temp}°{recipe.tempUnit || "C"}
             </div>
           </div>
@@ -574,16 +820,51 @@ function RecipeCard({ recipe, onEdit, onDelete }) {
           "{recipe.notes}"
         </div>
       )}
+
+      {/* Shot timeline — the dial-in story, one chip per shot */}
+      {(recipe.shots?.length > 0 || onLogShot) && (
+        <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
+          {recipe.shots?.length > 0 && (
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+              {recipe.shots.map((s, i) => {
+                const v = SHOT_VERDICTS.find((x) => x.key === s.verdict) || SHOT_VERDICTS[1];
+                return (
+                  <span key={i} title={`${v.label} — ${v.hint}`} style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    padding: "3px 8px", background: "#fff", border: `1.5px solid ${v.color}`,
+                    borderRadius: 6, fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text)",
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: v.color }} />
+                    @{s.grind}{s.time ? ` · ${s.time}s` : ""} {v.label}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          {onLogShot && (logging ? (
+            <ShotLogger
+              recipe={recipe}
+              onLog={(shot) => { onLogShot(shot); setLogging(false); }}
+              onCancel={() => setLogging(false)}
+            />
+          ) : (
+            <button onClick={() => setLogging(true)} style={{ padding: "5px 12px", background: "none", border: "1px dashed var(--accent)", color: "var(--accent)", borderRadius: 7, fontSize: 10.5, fontWeight: 600 }}>
+              + Log shot
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 // Manages the list of recipes for a bean: stacked cards, add / edit / delete.
-function EspressoRecipe({ coffee, onChange, baseline, allCoffees }) {
+function EspressoRecipe({ coffee, onChange, baseline, allCoffees, currentSetup }) {
   const recipes = getRecipes(coffee);
-  // editingId holds a recipe id, "__new__" while adding, or null when idle.
+  // editingId holds a recipe id, "__new__"/"__new_pour__" while adding, or null when idle.
   const [editingId, setEditingId] = useState(null);
   const [showDialIn, setShowDialIn] = useState(false);
+  const [dialInMethod, setDialInMethod] = useState("espresso");
 
   const prediction = useMemo(() => coffee ? calculateGrindOffset(coffee, coffee.pulledAt) : null, [coffee]);
 
@@ -592,7 +873,7 @@ function EspressoRecipe({ coffee, onChange, baseline, allCoffees }) {
 
   const handleSave = (rec) => {
     let next;
-    if (editingId === "__new__") {
+    if (editingId === "__new__" || editingId === "__new_pour__") {
       next = [...recipes, { ...rec, id: newRecipeId() }];
     } else {
       next = recipes.map((r) => (r.id === editingId ? { ...rec, id: r.id || newRecipeId() } : r));
@@ -608,9 +889,20 @@ function EspressoRecipe({ coffee, onChange, baseline, allCoffees }) {
     if (editingId === id) setEditingId(null);
   };
 
+  // Append a shot to a recipe. If it was a keeper, the shot's grind becomes the
+  // recipe's settled grind — the timeline holds the misses.
+  const handleLogShot = (id, shot) => {
+    commit(recipes.map((r) => {
+      if (r.id !== id) return r;
+      const next = { ...r, shots: [...(r.shots || []), shot] };
+      if (shot.verdict === "good" && shot.grind) next.grind = shot.grind;
+      return next;
+    }));
+  };
+
   const predictionCard = coffee && prediction?.rationale?.length > 0 && (
     <div style={{ marginBottom: recipes.length ? 4 : 8 }}>
-      <GrindPredictionCard coffee={coffee} baseline={baseline} allCoffees={allCoffees} compact />
+      <GrindPredictionCard coffee={coffee} baseline={baseline} allCoffees={allCoffees} currentSetup={currentSetup} compact />
     </div>
   );
 
@@ -620,33 +912,44 @@ function EspressoRecipe({ coffee, onChange, baseline, allCoffees }) {
 
       {recipes.map((r) =>
         editingId === r.id ? (
-          <RecipeEditor key={r.id} value={r} onSave={handleSave} onCancel={() => setEditingId(null)} />
+          <RecipeEditor key={r.id} value={r} onSave={handleSave} onCancel={() => setEditingId(null)} currentSetup={currentSetup} />
         ) : (
-          <RecipeCard key={r.id} recipe={r} onEdit={() => setEditingId(r.id)} onDelete={() => handleDelete(r.id)} />
+          <RecipeCard key={r.id} recipe={r} onEdit={() => setEditingId(r.id)} onDelete={() => handleDelete(r.id)} onLogShot={(shot) => handleLogShot(r.id, shot)} currentSetup={currentSetup} allCoffees={allCoffees} />
         )
       )}
 
       {editingId === "__new__" && (
-        <RecipeEditor value={emptyRecipe()} onSave={handleSave} onCancel={() => setEditingId(null)} />
+        <RecipeEditor value={emptyRecipe()} onSave={handleSave} onCancel={() => setEditingId(null)} currentSetup={currentSetup} />
+      )}
+      {editingId === "__new_pour__" && (
+        <RecipeEditor value={emptyRecipe("pourover")} onSave={handleSave} onCancel={() => setEditingId(null)} currentSetup={currentSetup} />
       )}
 
-      {editingId !== "__new__" && (
-        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <button onClick={(e) => { e.stopPropagation(); setEditingId("__new__"); }} style={{ flex: 1, padding: "6px 12px", background: "none", border: "1px dashed var(--border)", borderRadius: 6, fontSize: 11, color: "var(--muted)", textAlign: "left" }}>
-            {recipes.length === 0 ? "+ Espresso recipe" : "+ Add another recipe"}
+      {editingId !== "__new__" && editingId !== "__new_pour__" && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+          <button onClick={(e) => { e.stopPropagation(); setEditingId("__new__"); }} style={{ flex: 1, minWidth: 110, padding: "6px 12px", background: "none", border: "1px dashed var(--border)", borderRadius: 8, fontSize: 11, color: "var(--muted)", textAlign: "left" }}>
+            {recipes.length === 0 ? "+ Espresso recipe" : "+ Espresso"}
           </button>
-          <button onClick={(e) => { e.stopPropagation(); setShowDialIn(true); }} style={{ padding: "6px 12px", background: "var(--accent-light)", border: "1px solid var(--accent)", borderRadius: 6, fontSize: 11, fontWeight: 600, color: "var(--accent-dark)", whiteSpace: "nowrap" }}>
-            🤖 Dial in
+          <button onClick={(e) => { e.stopPropagation(); setEditingId("__new_pour__"); }} style={{ flex: 1, minWidth: 110, padding: "6px 12px", background: "none", border: "1px dashed var(--buffer)", borderRadius: 8, fontSize: 11, color: "var(--buffer)", textAlign: "left" }}>
+            + Pour-over
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); setDialInMethod("espresso"); setShowDialIn(true); }} style={{ padding: "6px 12px", background: "var(--accent-light)", border: "1px solid var(--accent)", borderRadius: 8, fontSize: 11, fontWeight: 600, color: "var(--accent-dark)", whiteSpace: "nowrap" }}>
+            ✦ Dial in
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); setDialInMethod("pourover"); setShowDialIn(true); }} style={{ padding: "6px 12px", background: "var(--buffer-bg)", border: "1px solid var(--buffer)", borderRadius: 8, fontSize: 11, fontWeight: 600, color: "var(--buffer)", whiteSpace: "nowrap" }}>
+            ✦ Pour-over help
           </button>
         </div>
       )}
 
       {showDialIn && (
         <DialInModal
-          key={coffee.id}
+          key={coffee.id + dialInMethod}
           coffee={coffee}
           baseline={baseline}
           allCoffees={allCoffees}
+          method={dialInMethod}
+          currentSetup={currentSetup}
           onApply={(newRecs, insight) => onChange({ recipes: [...getRecipes(coffee), ...newRecs], espresso: null, dialInNotes: insight })}
           onClose={() => setShowDialIn(false)}
         />
@@ -1268,7 +1571,7 @@ function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChang
         {coffee.bagColor ? <LabelCard coffee={coffee} size="medium" /> : coffee.labelImage && <LabelThumbnail src={coffee.labelImage} size={56} />}
 
         <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, marginBottom: 3 }}>
+          <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 16, fontWeight: 700, marginBottom: 3 }}>
             {coffee.name || "Unnamed"}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 4 }}>
@@ -1372,7 +1675,8 @@ function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChang
 export default function Home() {
   const { user, signOut } = useAuth();
   const { coffees, loading: coffeesLoading, addCoffee: addCoffeeToDb, updateCoffee: updateCoffeeInDb, moveToFreezer, archiveCoffee: archiveCoffeeInDb, unarchiveCoffee: unarchiveCoffeeInDb, deleteCoffee: deleteCoffeeFromDb, uploadLabelImage, migrateRestingCoffees } = useCoffees();
-  const { baselineGrind, baselineGrindInput, setBaselineGrind, doseG, setDoseG, loading: settingsLoading } = useSettings();
+  const { baselineGrind, baselineGrindInput, setBaselineGrind, doseG, setDoseG, machineId, setMachineId, basketId, setBasketId, loading: settingsLoading } = useSettings();
+  const currentSetup = useMemo(() => ({ machineId, basketId }), [machineId, basketId]);
   const { pours: lattePours, createPour: createLattePour, deletePour: deleteLattePour } = useLatteArt();
   const loaded = !coffeesLoading && !settingsLoading;
   const [showSettings, setShowSettings] = useState(false);
@@ -1420,6 +1724,26 @@ export default function Home() {
 
   const [editingCoffee, setEditingCoffee] = useState(null);
   const [viewingCoffee, setViewingCoffee] = useState(null);
+
+  // Museum: cut the bag out of its label photo (client-side matting), store
+  // the transparent PNG alongside the original.
+  const [cuttingId, setCuttingId] = useState(null);
+  const handleCutout = async (coffee) => {
+    if (!coffee?.labelImage || cuttingId) return;
+    setCuttingId(coffee.id);
+    try {
+      const { cutoutImage } = await import("@/lib/cutout");
+      const dataUrl = await cutoutImage(coffee.labelImage);
+      const url = await uploadLabelImage(dataUrl, "png");
+      if (url) await update(coffee.id, { labelCutout: url });
+      else setError("Cutout upload failed — try again.");
+    } catch (err) {
+      console.error("Cutout failed:", err);
+      setError("Could not cut out the label photo. Run the label_cutout_url migration if you haven't, then retry.");
+    } finally {
+      setCuttingId(null);
+    }
+  };
   const handleEditSave = async (data) => {
     if (!editingCoffee) return;
     await update(editingCoffee.id, data);
@@ -1456,8 +1780,21 @@ export default function Home() {
   }, [frozen, activeCoffees]);
   const [showAllActive, setShowAllActive] = useState(false);
 
-  const pull = async (id) => {
-    await update(id, { status: "active", dosesUsed: 0, pulledAt: new Date().toISOString() });
+  // Pull a bag out of the freezer. When a specific portion is chosen (they can
+  // differ in grams — e.g. the odd 36g one), it's moved into the current slot
+  // so it becomes the active portion.
+  const [pullPicker, setPullPicker] = useState(null);
+  const pull = async (id, portionIdx = null) => {
+    const c = coffees.find((x) => x.id === id);
+    const patch = { status: "active", dosesUsed: 0, pulledAt: new Date().toISOString() };
+    if (c && portionIdx !== null && portionIdx !== c.portionIndex) {
+      const portions = [...c.portions];
+      const [chosen] = portions.splice(portionIdx, 1);
+      portions.splice(c.portionIndex, 0, chosen);
+      patch.portions = portions;
+    }
+    setPullPicker(null);
+    await update(id, patch);
     setView("morning");
   };
 
@@ -1658,7 +1995,7 @@ export default function Home() {
     { key: "resting", icon: "○", label: "Resting" },
     { key: "freezer", icon: "❄", label: "Freezer" },
     { key: "scan", icon: "◎", label: "Scan" },
-    { key: "archive", icon: "≡", label: "Archive" },
+    { key: "archive", icon: "◫", label: "Museum" },
   ];
 
   if (!loaded) return null;
@@ -1672,7 +2009,7 @@ export default function Home() {
 
         {/* PWA */}
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#5C2D0E" />
+        <meta name="theme-color" content="#462C17" />
         <meta name="mobile-web-app-capable" content="yes" />
 
         {/* iOS */}
@@ -1688,7 +2025,7 @@ export default function Home() {
         {/* Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Caveat:wght@400;700&family=Dancing+Script:wght@400;700&family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;800&family=Noto+Sans+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </Head>
 
       <div style={{ minHeight: "100vh", paddingBottom: 80 }}>
@@ -1709,10 +2046,19 @@ export default function Home() {
                   value={baselineGrindInput}
                   onChange={(e) => setBaselineGrind(e.target.value)}
                   placeholder="e.g. 4.5"
-                  style={{ width: 80, padding: "6px 8px", border: "1px solid var(--border)", borderRadius: 5, fontSize: 12, fontFamily: "'DM Mono', monospace", textAlign: "center" }}
+                  style={{ width: 80, padding: "6px 8px", border: "1px solid var(--border)", borderRadius: 5, fontSize: 12, fontFamily: "'Noto Sans Mono', monospace", textAlign: "center" }}
                 />
               </div>
               <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 6 }}>Your typical setting for a medium-roast washed coffee</div>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+                <EquipmentPicker
+                  machineId={machineId}
+                  basketId={basketId}
+                  onMachineChange={setMachineId}
+                  onBasketChange={setBasketId}
+                  allCoffees={coffees}
+                />
+              </div>
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 8 }}>Account</div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1754,6 +2100,7 @@ export default function Home() {
                     onChange={(patch) => update(ac.id, patch)}
                     baseline={baselineGrind}
                     allCoffees={coffees}
+                    currentSetup={currentSetup}
                   />
                 ) : null;
               })()}
@@ -1778,7 +2125,7 @@ export default function Home() {
                           <div style={{ display: "flex", gap: 12, flex: 1 }}>
                             {active.bagColor ? <LabelCard coffee={active} size="large" /> : active.labelImage && <LabelThumbnail src={active.labelImage} size={64} />}
                             <div>
-                              <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{active.name || "Unnamed"}</div>
+                              <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{active.name || "Unnamed"}</div>
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
                                 {active.country && <Badge>{active.country}</Badge>}
                                 {active.variety && <Badge bg="#EDE0D0">{active.variety}</Badge>}
@@ -1797,7 +2144,7 @@ export default function Home() {
                           </div>
                         </div>
                         {cur && <DoseTracker portion={cur} dosesUsed={active.dosesUsed} onChange={(d) => update(active.id, { dosesUsed: d })} doseG={active.doseG || DEFAULT_DOSE_G} />}
-                        <EspressoRecipe coffee={active} onChange={(patch) => update(active.id, patch)} baseline={baselineGrind} allCoffees={coffees} />
+                        <EspressoRecipe coffee={active} onChange={(patch) => update(active.id, patch)} baseline={baselineGrind} allCoffees={coffees} currentSetup={currentSetup} />
                         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                           <button onClick={(e) => { e.stopPropagation(); finishPortion(active); }} style={{ flex: 1, padding: "9px 0", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>
                             {more > 0 ? "Portion done → freezer" : "Bag finished"}
@@ -1851,7 +2198,7 @@ export default function Home() {
                         const count = getRecipes(c).length;
                         if (!rec || (!rec.dose && !rec.grind)) return null;
                         return (
-                          <div style={{ marginTop: 8, padding: "6px 8px", background: "#FAF7F4", borderRadius: 5, fontSize: 11, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
+                          <div style={{ marginTop: 8, padding: "6px 8px", background: "#FAF7F4", borderRadius: 5, fontSize: 11, fontFamily: "'Noto Sans Mono', monospace", color: "var(--text)" }}>
                             <span style={{ fontSize: 9, fontWeight: 600, color: "var(--accent)", marginRight: 6 }}>{count > 1 ? (rec.name || "RECIPE").toUpperCase() : "RECIPE"}:</span>
                             {rec.dose && <span>{rec.dose}g → </span>}
                             {rec.yield && <span>{rec.yield}g </span>}
@@ -1935,7 +2282,7 @@ export default function Home() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                       {c.bagColor ? <LabelCard coffee={c} size="medium" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={56} />}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, marginBottom: 3 }}>
+                        <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 16, fontWeight: 700, marginBottom: 3 }}>
                           {c.name || "Unnamed"} {c.favorite && <span style={{ color: "var(--star)", fontSize: 13 }}>★</span>}
                         </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 4 }}>
@@ -1950,7 +2297,7 @@ export default function Home() {
                         <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ice)" }}>{c.isActiveRemaining ? c.portions.slice(c.portionIndex + 1).reduce((s, p) => s + p.grams, 0) : rg(c)}g</div>
                         <div style={{ fontSize: 10, color: "var(--muted)" }}>{c.isActiveRemaining ? c.portions.length - c.portionIndex - 1 : rp(c)} portion{(c.isActiveRemaining ? c.portions.length - c.portionIndex - 1 : rp(c)) !== 1 ? "s" : ""}</div>
                         {c.isActiveRemaining && <div style={{ fontSize: 10, color: "var(--active)", fontWeight: 600, marginTop: 2 }}>● 1 active</div>}
-                        {c.roastDate && <div style={{ marginTop: 2 }}><span style={{ padding: "2px 6px", background: "var(--accent-light)", borderRadius: 4, fontSize: 10, fontWeight: 600, color: "var(--accent-dark)", fontFamily: "'DM Mono', monospace" }}>{getRoastQuarter(c.roastDate)}</span></div>}
+                        {c.roastDate && <div style={{ marginTop: 2 }}><span style={{ padding: "2px 6px", background: "var(--accent-light)", borderRadius: 4, fontSize: 10, fontWeight: 600, color: "var(--accent-dark)", fontFamily: "'Noto Sans Mono', monospace" }}>{getRoastQuarter(c.roastDate)}</span></div>}
                         <div style={{ fontSize: 10, color: "var(--ice)", fontWeight: 600, marginTop: 2 }}>❄ {fmt(c.addedAt)}</div>
                         <div style={{ fontSize: 9, color: "var(--muted)" }}>{daysAgo(c.addedAt)}</div>
                       </div>
@@ -1970,12 +2317,40 @@ export default function Home() {
                     {/* Always-visible actions — pull without needing to expand */}
                     <div style={{ marginTop: 12, display: "flex", gap: 8 }} onClick={(e) => e.stopPropagation()}>
                       {!c.isActiveRemaining ? (
-                        <button onClick={(e) => { e.stopPropagation(); pull(c.id); }} style={{ flex: 1, padding: "10px 0", background: "var(--ice)", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700 }}>❄ Pull a portion</button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (rp(c) > 1) setPullPicker(pullPicker === c.id ? null : c.id);
+                            else pull(c.id);
+                          }}
+                          style={{ flex: 1, padding: "10px 0", background: "var(--ice)", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700 }}
+                        >❄ Pull a portion{rp(c) > 1 ? "…" : ""}</button>
                       ) : (
-                        <div style={{ flex: 1, padding: "10px 0", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 8, fontSize: 12, fontWeight: 600, textAlign: "center", color: "var(--active)" }}>● Active — finish portion first</div>
+                        <div style={{ flex: 1, padding: "10px 0", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 10, fontSize: 12, fontWeight: 600, textAlign: "center", color: "var(--active)" }}>● Active — finish portion first</div>
                       )}
-                      <button onClick={(e) => { e.stopPropagation(); setExpanded(isExp ? null : c.id); }} style={{ padding: "10px 14px", background: "none", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 8, fontSize: 12, whiteSpace: "nowrap" }}>{isExp ? "Less ▲" : "More ▼"}</button>
+                      <button onClick={(e) => { e.stopPropagation(); setExpanded(isExp ? null : c.id); }} style={{ padding: "10px 14px", background: "none", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 10, fontSize: 12, whiteSpace: "nowrap" }}>{isExp ? "Less ▲" : "More ▼"}</button>
                     </div>
+                    {/* Portion chooser — not every portion weighs the same */}
+                    {pullPicker === c.id && !c.isActiveRemaining && (
+                      <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8, padding: "10px 12px", background: "var(--ice-bg)", border: "1px solid var(--ice)", borderRadius: 10 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--ice)", marginBottom: 8 }}>Which portion?</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {c.portions.map((p, i) => i < c.portionIndex ? null : (
+                            <button
+                              key={i}
+                              onClick={() => pull(c.id, i)}
+                              style={{
+                                padding: "8px 12px", background: "#fff", border: "1.5px solid var(--ice)",
+                                borderRadius: 8, textAlign: "center", minWidth: 72,
+                              }}
+                            >
+                              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ice)", fontFamily: "var(--font-mono)" }}>{p.grams}g</div>
+                              <div style={{ fontSize: 9.5, color: "var(--muted)" }}>{p.doses} dose{p.doses !== 1 ? "s" : ""}{p.buffer > 0 ? ` +${p.buffer}g` : ""}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {isExp && (
                       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
                         {(c.bagColor || c.labelImage) && (
@@ -1987,11 +2362,11 @@ export default function Home() {
                         {getRecipes(c).filter((r) => r.dose || r.yield || r.totalTime || r.time || r.grind).map((r, ri) => (
                           <div key={r.id || ri} style={{ marginBottom: 10, padding: "10px 12px", background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)", border: "1.5px solid var(--accent-light, #E8D5C4)", borderRadius: 8, boxShadow: "0 2px 6px rgba(92,45,14,0.06)" }}>
                             <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 }}>● {r.name || "Espresso Recipe"}</div>
-                            <div style={{ display: "flex", gap: 10, fontSize: 13, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--text)", fontWeight: 500 }}>
+                            <div style={{ display: "flex", gap: 10, fontSize: 13, fontFamily: "'Noto Sans Mono', monospace", flexWrap: "wrap", color: "var(--text)", fontWeight: 500 }}>
                               {r.dose && <span>{r.dose}g →</span>}
                               {r.yield && <span>{r.yield}g</span>}
                             </div>
-                            <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "'DM Mono', monospace", flexWrap: "wrap", color: "var(--muted)", marginTop: 4 }}>
+                            <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "'Noto Sans Mono', monospace", flexWrap: "wrap", color: "var(--muted)", marginTop: 4 }}>
                               {(r.totalTime || r.time) && <span>{r.totalTime || r.time}s{r.preInfuse ? ` (pre:${r.preInfuse}s)` : ""}{r.brewTime ? ` (brew:${r.brewTime}s)` : ""}</span>}
                               {r.grind && <span>@{r.grind}{r.feedSpeed ? ` · ${r.feedSpeed}` : ""}</span>}
                               {r.temp && <span>{r.temp}°{r.tempUnit || "C"}</span>}
@@ -2138,31 +2513,19 @@ export default function Home() {
             </div>
           )}
 
-          {/* ─── ARCHIVE ─── */}
+          {/* ─── MUSEUM (archive) ─── */}
           {view === "archive" && (
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--done)", marginBottom: 12 }}>Archive — {archive.length} bag{archive.length !== 1 ? "s" : ""}</div>
-              {archive.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", fontSize: 13 }}>Nothing here yet.</div>
-              ) : archive.map((c) => (
-                <div key={c.id} onClick={() => setViewingCoffee(c)} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                        {c.name || "Unnamed"} {c.favorite && <span style={{ color: "var(--star)", fontSize: 12 }}>★</span>}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--muted)" }}>{c.country}{c.variety ? ` · ${c.variety}` : ""} · {c.gramsTotal}g · {fmtFull(c.addedAt)}</div>
-                      <Stars value={c.rating || 0} size={12} />
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={(e) => { e.stopPropagation(); unarchiveCoffee(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--ice)", color: "var(--ice)", borderRadius: 5, fontSize: 11 }} title="Move to Freezer">❄</button>
-                      <button onClick={(e) => { e.stopPropagation(); setEditingCoffee(c); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 5, fontSize: 11 }} title="Edit">✎</button>
-                      <button onClick={(e) => { e.stopPropagation(); del(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 5, fontSize: 11 }} title="Delete">✕</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <MuseumArchive
+              archive={archive}
+              currentSetup={currentSetup}
+              allCoffees={coffees}
+              onView={setViewingCoffee}
+              onUnarchive={unarchiveCoffee}
+              onEdit={setEditingCoffee}
+              onDelete={del}
+              onCutout={handleCutout}
+              cuttingId={cuttingId}
+            />
           )}
         </div>
 
@@ -2202,6 +2565,7 @@ export default function Home() {
           onUpdate={update}
           baseline={baselineGrind}
           allCoffees={coffees}
+          currentSetup={currentSetup}
         />
       )}
 

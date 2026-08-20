@@ -41,8 +41,8 @@ function sumSeconds(a, b) {
 
 // Turn a guidance drink into a saveable recipe. Grind is left blank (the user
 // dials the actual number using the direction hint, which goes in the notes);
-// the Slayer pre-brew / full-throttle times map to preInfuse / brewTime.
-function drinkToRecipe(drink, dose) {
+// the machine's pre-brew / full-throttle times map to preInfuse / brewTime.
+function drinkToRecipe(drink, dose, currentSetup) {
   const factor = parseRatioFactor(drink.ratio);
   const { temp, unit } = parseTemp(drink.temp);
   const preInfuse = cleanSeconds(drink.preBrew);
@@ -54,10 +54,41 @@ function drinkToRecipe(drink, dose) {
   ].filter(Boolean).join(" · ");
   return {
     name: drink.name || "Recipe",
+    method: "espresso",
+    machineId: currentSetup?.machineId || "",
+    basketId: currentSetup?.basketId || "",
     dose: String(dose),
     yield: factor ? String(Math.round(dose * factor)) : "",
     preInfuse, brewTime, totalTime: sumSeconds(preInfuse, brewTime),
     grind: "", feedSpeed: "",
+    temp, tempUnit: unit,
+    notes,
+  };
+}
+
+// Pour-over guidance → saveable recipe. Bloom like "45g · 35s" splits into
+// bloomG/bloomTime; pours ("2 × 130g") and drawdown target land verbatim.
+function pourDrinkToRecipe(drink, brewer) {
+  const { temp, unit } = parseTemp(drink.temp);
+  const doseG = parseFloat(drink.doseG) || "";
+  const bloomNums = (String(drink.bloom || "").match(/\d+(?:\.\d+)?/g) || []);
+  const notes = [
+    drink.grindDirection ? `${drink.grindDirection} grind` : null,
+    drink.pours ? `pours: ${drink.pours}` : null,
+    drink.note || null,
+  ].filter(Boolean).join(" · ");
+  const poursCount = (String(drink.pours || "").match(/^\s*(\d+)/) || [])[1] || "";
+  return {
+    name: drink.name || "Pour-Over",
+    method: "pourover",
+    brewer: brewer || "origami",
+    dose: doseG ? String(doseG) : "",
+    waterG: drink.waterG ? String(parseFloat(drink.waterG) || drink.waterG) : "",
+    bloomG: bloomNums[0] || "",
+    bloomTime: bloomNums[1] || "",
+    pours: poursCount,
+    totalTime: drink.totalTime || "",
+    grind: "", yield: "", preInfuse: "", brewTime: "", feedSpeed: "",
     temp, tempUnit: unit,
     notes,
   };
@@ -87,17 +118,24 @@ function DrinkCard({ drink, dose, selected, onToggle }) {
           </span>
         )}
       </div>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 13, fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 13, fontFamily: "'Noto Sans Mono', monospace", color: "var(--text)" }}>
         {drink.ratio && (
-          <span><strong>{drink.ratio}</strong>{yieldG ? ` · ${dose}g→${yieldG}g` : ""}</span>
+          <span><strong>{drink.ratio}</strong>{drink.waterG ? ` · ${drink.doseG || dose}g→${drink.waterG}g` : yieldG ? ` · ${dose}g→${yieldG}g` : ""}</span>
         )}
         {drink.temp && <span style={{ color: "var(--muted)" }}>{drink.temp}</span>}
       </div>
       {(drink.preBrew || drink.fullThrottle) && (
-        <div style={{ marginTop: 5, fontSize: 12, fontFamily: "'DM Mono', monospace", color: "var(--accent-dark)" }}>
+        <div style={{ marginTop: 5, fontSize: 12, fontFamily: "'Noto Sans Mono', monospace", color: "var(--accent-dark)" }}>
           {drink.preBrew && <span>pre-brew {drink.preBrew}</span>}
           {drink.preBrew && drink.fullThrottle && <span style={{ color: "var(--muted)" }}> → </span>}
           {drink.fullThrottle && <span>full throttle {drink.fullThrottle}</span>}
+        </div>
+      )}
+      {(drink.bloom || drink.pours || drink.totalTime) && (
+        <div style={{ marginTop: 5, fontSize: 12, fontFamily: "'Noto Sans Mono', monospace", color: "var(--accent-dark)", display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {drink.bloom && <span>bloom {drink.bloom}</span>}
+          {drink.pours && <span>{drink.pours}</span>}
+          {drink.totalTime && <span style={{ color: "var(--muted)" }}>{drink.totalTime}</span>}
         </div>
       )}
       {drink.note && (
@@ -107,55 +145,79 @@ function DrinkCard({ drink, dose, selected, onToggle }) {
   );
 }
 
-export function DialInModal({ coffee, onApply, onClose }) {
+const BREWER_OPTIONS = [
+  { id: "origami", label: "Origami" },
+  { id: "v60", label: "V60" },
+  { id: "kalita", label: "Kalita" },
+  { id: "chemex", label: "Chemex" },
+];
+
+export function DialInModal({ coffee, onApply, onClose, method = "espresso", currentSetup }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [picks, setPicks] = useState([]);
+  const [brewer, setBrewer] = useState("origami");
+  const fetchSeq = useRef(0);
   const started = useRef(false);
 
   const dose = coffee.doseG || 18;
   const drinks = result?.drinks || [];
+  const isPourover = method === "pourover";
+
+  const fetchGuidance = async (brewerId) => {
+    const seq = ++fetchSeq.current;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const supabase = getSupabase();
+      const { data: { session } = {} } = (await supabase?.auth.getSession()) || {};
+      const token = session?.access_token;
+      if (!token) { setError("Please sign in again."); setLoading(false); return; }
+
+      const res = await fetch("/api/dial-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          variety: coffee.variety, process: coffee.process,
+          country: coffee.country, region: coffee.region,
+          altitude: coffee.altitude, altitudeCategory: coffee.altitudeCategory,
+          roastLevel: coffee.roastLevel, tastingNotes: coffee.tastingNotes,
+          doseG: coffee.doseG,
+          method,
+          machineId: currentSetup?.machineId,
+          brewer: brewerId,
+        }),
+      });
+      const data = await res.json();
+      if (seq !== fetchSeq.current) return; // superseded by a newer request
+      if (!res.ok) { setError(data.error || "Dial-in failed."); setLoading(false); return; }
+      setResult(data);
+      setPicks((data.drinks || []).map(() => true));
+    } catch (err) {
+      if (seq === fetchSeq.current) setError("Dial-in failed. Please try again.");
+    } finally {
+      if (seq === fetchSeq.current) setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (started.current) return;
+    if (started.current) return; // guard the paid call against strict-mode double-mount
     started.current = true;
-    (async () => {
-      try {
-        const supabase = getSupabase();
-        const { data: { session } = {} } = (await supabase?.auth.getSession()) || {};
-        const token = session?.access_token;
-        if (!token) { setError("Please sign in again."); setLoading(false); return; }
-
-        const res = await fetch("/api/dial-in", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            variety: coffee.variety, process: coffee.process,
-            country: coffee.country, region: coffee.region,
-            altitude: coffee.altitude, altitudeCategory: coffee.altitudeCategory,
-            roastLevel: coffee.roastLevel, tastingNotes: coffee.tastingNotes,
-            doseG: coffee.doseG,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) { setError(data.error || "Dial-in failed."); setLoading(false); return; }
-        setResult(data);
-        setPicks((data.drinks || []).map(() => true));
-      } catch (err) {
-        setError("Dial-in failed. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [coffee]);
+    fetchGuidance(brewer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const anyPicked = picks.some(Boolean);
 
   const save = () => {
     const chosen = drinks
       .filter((_, i) => picks[i])
-      .map((d) => ({ ...drinkToRecipe(d, dose), id: newRecipeId() }));
+      .map((d) => ({
+        ...(isPourover ? pourDrinkToRecipe(d, brewer) : drinkToRecipe(d, dose, currentSetup)),
+        id: newRecipeId(),
+      }));
     if (chosen.length === 0) { onClose(); return; }
     // Parent merges against its current recipes; this modal's coffee is a snapshot.
     onApply(chosen, result.insight || null);
@@ -171,13 +233,34 @@ export function DialInModal({ coffee, onApply, onClose }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1100 }} onClick={onClose}>
       <div style={sheet} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--accent-dark)" }}>🤖 AI Dial-In · {coffee.name || "Coffee"}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--accent-dark)" }}>
+            ✦ {isPourover ? "Pour-Over Dial-In" : "AI Dial-In"} · {coffee.name || "Coffee"}
+          </div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, color: "var(--muted)", cursor: "pointer" }}>×</button>
         </div>
 
+        {isPourover && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            {BREWER_OPTIONS.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => { if (b.id !== brewer) { setBrewer(b.id); fetchGuidance(b.id); } }}
+                disabled={loading}
+                style={{
+                  flex: 1, padding: "7px 0", borderRadius: 8, fontSize: 11, fontWeight: 700,
+                  background: brewer === b.id ? "var(--accent-dark)" : "var(--card)",
+                  color: brewer === b.id ? "#fff" : "var(--muted)",
+                  border: `1.5px solid ${brewer === b.id ? "var(--accent-dark)" : "var(--border)"}`,
+                  opacity: loading && brewer !== b.id ? 0.5 : 1,
+                }}
+              >{b.label}</button>
+            ))}
+          </div>
+        )}
+
         {loading && (
           <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)" }}>
-            <div style={{ fontSize: 26, marginBottom: 10 }}>☕</div>
+            <div style={{ width: 26, height: 26, margin: "0 auto 12px", border: "3px solid var(--border)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Working out a recipe…</div>
             <div style={{ fontSize: 11 }}>Based on the variety &amp; process. A few seconds.</div>
           </div>
@@ -208,7 +291,9 @@ export function DialInModal({ coffee, onApply, onClose }) {
             ))}
 
             <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 12 }}>
-              Saving sets the ratio (dose→yield), pre-brew &amp; full-throttle times, and notes the grind direction; dial the exact grind, then fill it in.
+              {isPourover
+                ? "Saving sets dose, water, bloom and pour structure, and notes the grind direction; dial the exact grind, then fill it in."
+                : "Saving sets the ratio (dose→yield), pre-brew & full-throttle times, and notes the grind direction; dial the exact grind, then fill it in."}
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>

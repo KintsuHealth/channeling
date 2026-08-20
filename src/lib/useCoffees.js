@@ -231,7 +231,7 @@ export function useCoffees() {
     }
   }, [user]);
 
-  const uploadLabelImage = useCallback(async (base64Data) => {
+  const uploadLabelImage = useCallback(async (base64Data, ext = 'jpg') => {
     if (!user) return null;
 
     const supabase = getSupabase();
@@ -241,7 +241,7 @@ export function useCoffees() {
       // Convert base64 to blob
       const response = await fetch(base64Data);
       const blob = await response.blob();
-      const fileName = `${user.id}/${Date.now()}.jpg`;
+      const fileName = `${user.id}/${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from('label-images')
