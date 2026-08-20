@@ -73,6 +73,7 @@ export const BASKETS = [
     name: "Slayer Stock 18g",
     short: "Stock 18g",
     doseG: 18,
+    image: "/machines/basket-slayer-18.png",
     // Reference basket.
     grindPrior: 0,
     note: "The stock basket every pre-upgrade dial-in was recorded on.",
@@ -82,6 +83,7 @@ export const BASKETS = [
     name: "Weber Workshops Unifilter 20g",
     short: "Unifilter 20g",
     doseG: 20,
+    image: "/machines/basket-unifilter-20.png",
     // +2g dose adds puck resistance → start a touch coarser; the Unifilter's
     // high-uniformity geometry pulls part of that back. Net starting prior.
     grindPrior: 0.2,

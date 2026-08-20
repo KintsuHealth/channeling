@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { getRecipes, primaryEspressoRecipe, recipeMethod } from "../lib/recipes";
 import { translateGrind, basketById, machineById, recipeEquipment } from "../lib/equipment";
+import CoverFlow from "./CoverFlow";
+import CardMenu from "./CardMenu";
 
 // The archive as a museum: finished bags hang as works in dated exhibitions,
 // each with a placard — origin, tenure (acquired → consumed), and how it was
@@ -71,7 +73,7 @@ function BagArt({ coffee }) {
   );
 }
 
-function Piece({ coffee, currentSetup, allCoffees, onView, onUnarchive, onEdit, onDelete, onCutout, cuttingId }) {
+function Piece({ coffee, currentSetup, allCoffees, onView, onUnarchive, onEdit, onDelete, onCutout, onUncutout, cuttingId }) {
   const rec = primaryEspressoRecipe(coffee) || getRecipes(coffee)[0] || null;
   const grindNum = rec ? parseFloat(rec.grind) : NaN;
   const translated = rec ? translateGrind(rec, currentSetup, allCoffees) : null;
@@ -195,24 +197,24 @@ function Piece({ coffee, currentSetup, allCoffees, onView, onUnarchive, onEdit, 
       </div>
 
       {/* Curator actions */}
-      <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 8 }}>
-        {coffee.labelImage && !coffee.labelCutout && onCutout && (
-          <button
-            onClick={() => onCutout(coffee)}
-            disabled={cuttingId === coffee.id}
-            title="Cut the bag out of its photo so it floats on the wall"
-            style={{ padding: "5px 12px", background: "none", border: "1px solid var(--accent-dark)", color: "var(--accent-dark)", borderRadius: 7, fontSize: 11, opacity: cuttingId === coffee.id ? 0.5 : 1 }}
-          >{cuttingId === coffee.id ? "Cutting…" : "✂ Cut out"}</button>
+      <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+        {cuttingId === coffee.id ? (
+          <span style={{ fontSize: 11, color: "var(--muted)", padding: "6px 0" }}>✂ Cutting…</span>
+        ) : (
+          <CardMenu size={28} items={[
+            coffee.labelImage && !coffee.labelCutout && onCutout && { label: "Cut out bag", icon: "✂", onClick: () => onCutout(coffee) },
+            coffee.labelCutout && onUncutout && { label: "Undo cutout", icon: "↩", onClick: () => onUncutout(coffee.id) },
+            { label: "Return to freezer", icon: "❄", onClick: () => onUnarchive(coffee.id) },
+            { label: "Edit", icon: "✎", onClick: () => onEdit(coffee) },
+            { label: "Delete", icon: "✕", danger: true, onClick: () => onDelete(coffee.id) },
+          ]} />
         )}
-        <button onClick={() => onUnarchive(coffee.id)} title="Return to freezer" style={{ padding: "5px 12px", background: "none", border: "1px solid var(--ice)", color: "var(--ice)", borderRadius: 7, fontSize: 11 }}>❄</button>
-        <button onClick={() => onEdit(coffee)} title="Edit" style={{ padding: "5px 12px", background: "none", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 7, fontSize: 11 }}>✎</button>
-        <button onClick={() => onDelete(coffee.id)} title="Delete" style={{ padding: "5px 12px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 7, fontSize: 11 }}>✕</button>
       </div>
     </div>
   );
 }
 
-export default function MuseumArchive({ archive, currentSetup, allCoffees, onView, onUnarchive, onEdit, onDelete, onCutout, cuttingId }) {
+export default function MuseumArchive({ archive, currentSetup, allCoffees, onView, onUnarchive, onEdit, onDelete, onCutout, onUncutout, cuttingId }) {
   const [listMode, setListMode] = useState(false);
 
   const exhibitions = useMemo(() => {
@@ -251,6 +253,14 @@ export default function MuseumArchive({ archive, currentSetup, allCoffees, onVie
         </button>
       </div>
 
+      {!listMode && archive.length >= 3 && (
+        <CoverFlow
+          coffees={archive}
+          onSelect={onView}
+          caption={(c) => [c.roaster, fmtDate(c.finishedAt || c.addedAt)].filter(Boolean).join(" · ")}
+        />
+      )}
+
       {listMode ? (
         archive.map((c) => (
           <div key={c.id} onClick={() => onView(c)} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "11px 14px", marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
@@ -262,10 +272,11 @@ export default function MuseumArchive({ archive, currentSetup, allCoffees, onVie
                 {[c.roaster, c.country].filter(Boolean).join(" · ")} · {fmtDate(c.finishedAt || c.addedAt)}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-              <button onClick={(e) => { e.stopPropagation(); onUnarchive(c.id); }} style={{ padding: "6px 10px", background: "none", border: "1px solid var(--ice)", color: "var(--ice)", borderRadius: 6, fontSize: 11 }}>❄</button>
-              <button onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} style={{ padding: "6px 10px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 6, fontSize: 11 }}>✕</button>
-            </div>
+            <CardMenu size={28} items={[
+              { label: "Return to freezer", icon: "❄", onClick: () => onUnarchive(c.id) },
+              { label: "Edit", icon: "✎", onClick: () => onEdit(c) },
+              { label: "Delete", icon: "✕", danger: true, onClick: () => onDelete(c.id) },
+            ]} />
           </div>
         ))
       ) : (
@@ -288,6 +299,7 @@ export default function MuseumArchive({ archive, currentSetup, allCoffees, onVie
                   onEdit={onEdit}
                   onDelete={onDelete}
                   onCutout={onCutout}
+                  onUncutout={onUncutout}
                   cuttingId={cuttingId}
                 />
               ))}

@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/useAuth";
 import { DataMigration } from "@/components/DataMigration";
 import { optimizePortions, parseGrams, DEFAULT_DOSE_G, DEFAULT_DOSES_PER_PORTION } from "@/lib/portions";
 import { useStats } from "@/lib/useStats";
-import Overview from "@/components/Overview";
+import Overview, { Insights } from "@/components/Overview";
 import { EditCoffeeModal } from "@/components/EditCoffeeModal";
 import { CoffeeDetailModal } from "@/components/CoffeeDetailModal";
 import { DuplicateDetectionModal } from "@/components/DuplicateDetectionModal";
@@ -28,6 +28,8 @@ import { getRecipes, primaryRecipe, emptyRecipe, newRecipeId, recipeMethod, POUR
 import { machineById, basketById, translateGrind, MACHINES, BASKETS } from "@/lib/equipment";
 import EquipmentPicker from "@/components/EquipmentPicker";
 import MuseumArchive from "@/components/MuseumArchive";
+import CoverFlow from "@/components/CoverFlow";
+import CardMenu from "@/components/CardMenu";
 
 const fmt = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
 const fmtFull = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "");
@@ -1625,16 +1627,16 @@ function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChang
       </div>
 
       {/* Actions */}
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
         <button
-          onClick={(e) => { e.stopPropagation(); onMoveToFreezer(coffee.id); }}
+          onClick={() => onMoveToFreezer(coffee.id)}
           style={{
             flex: 1,
-            padding: "9px 0",
+            padding: "10px 0",
             background: isReadyToFreeze ? "var(--ice)" : "var(--card)",
             color: isReadyToFreeze ? "#fff" : "var(--ice)",
             border: `1.5px solid var(--ice)`,
-            borderRadius: 7,
+            borderRadius: 10,
             fontSize: 12,
             fontWeight: 600,
             cursor: "pointer",
@@ -1642,30 +1644,10 @@ function RestingCard({ coffee, onMoveToFreezer, onEdit, onArchive, onRatingChang
         >
           ❄ Move to Freezer
         </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onEdit(coffee); }}
-          style={{
-            padding: "9px 14px",
-            background: "none",
-            border: "1px solid var(--accent)",
-            color: "var(--accent)",
-            borderRadius: 7,
-            fontSize: 12,
-          }}
-          title="Edit"
-        >✎</button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onArchive(coffee.id); }}
-          style={{
-            padding: "9px 14px",
-            background: "none",
-            border: "1px solid var(--done)",
-            color: "var(--done)",
-            borderRadius: 7,
-            fontSize: 12,
-          }}
-          title="Archive"
-        >✓</button>
+        <CardMenu size={34} items={[
+          { label: "Edit", icon: "✎", onClick: () => onEdit(coffee) },
+          { label: "Archive", icon: "✓", onClick: () => onArchive(coffee.id) },
+        ]} />
       </div>
     </div>
   );
@@ -1744,6 +1726,8 @@ export default function Home() {
       setCuttingId(null);
     }
   };
+  // Undo a cutout that didn't matte well — the framed photo comes back.
+  const handleUncutout = (id) => update(id, { labelCutout: null });
   const handleEditSave = async (data) => {
     if (!editingCoffee) return;
     await update(editingCoffee.id, data);
@@ -1989,14 +1973,15 @@ export default function Home() {
 
   const stats = useStats(coffees);
 
+  // Four places. Resting is a phase (it lives on Home); Scan is the "+" button.
   const nav = [
     { key: "overview", icon: "◐", label: "Home" },
-    { key: "morning", icon: "☀", label: "Active" },
-    { key: "resting", icon: "○", label: "Resting" },
+    { key: "morning", icon: "☀", label: "Brew" },
     { key: "freezer", icon: "❄", label: "Freezer" },
-    { key: "scan", icon: "◎", label: "Scan" },
     { key: "archive", icon: "◫", label: "Museum" },
   ];
+  // Views without their own tab highlight their parent.
+  const activeTab = { resting: "overview", insights: "overview", scan: null }[view] ?? view;
 
   if (!loaded) return null;
 
@@ -2082,6 +2067,12 @@ export default function Home() {
           {view === "overview" && (
             <Overview
               stats={stats}
+              equipment={{
+                machineId,
+                basketId,
+                onBasketChange: setBasketId,
+                onOpenSettings: () => setShowSettings(true),
+              }}
               onUseDose={() => {
                 const active = activeCoffees[0];
                 if (active && active.dosesUsed < active.portions[active.portionIndex]?.doses) {
@@ -2090,7 +2081,9 @@ export default function Home() {
               }}
               onPullFromFreezer={() => setView("freezer")}
               onViewResting={() => setView("resting")}
-              latteArt={{ pours: lattePours, createPour: createLattePour, deletePour: deleteLattePour }}
+              onViewInsights={() => setView("insights")}
+              upNext={frozen.slice(0, 2)}
+              onPull={pull}
               recipeSlot={(() => {
                 const ac = stats.activeCoffee ? (coffees.find((c) => c.id === stats.activeCoffee.id) || stats.activeCoffee) : null;
                 return ac ? (
@@ -2104,6 +2097,15 @@ export default function Home() {
                   />
                 ) : null;
               })()}
+            />
+          )}
+
+          {/* ─── INSIGHTS ─── */}
+          {view === "insights" && (
+            <Insights
+              stats={stats}
+              latteArt={{ pours: lattePours, createPour: createLattePour, deletePour: deleteLattePour }}
+              onBack={() => setView("overview")}
             />
           )}
 
@@ -2129,7 +2131,6 @@ export default function Home() {
                               <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 6 }}>
                                 {active.country && <Badge>{active.country}</Badge>}
                                 {active.variety && <Badge bg="#EDE0D0">{active.variety}</Badge>}
-                                {active.roastLevel && <Badge bg="#E5DDD4">{active.roastLevel}</Badge>}
                               </div>
                               <Stars value={active.rating || 0} onChange={(r) => update(active.id, { rating: r })} />
                             </div>
@@ -2145,14 +2146,16 @@ export default function Home() {
                         </div>
                         {cur && <DoseTracker portion={cur} dosesUsed={active.dosesUsed} onChange={(d) => update(active.id, { dosesUsed: d })} doseG={active.doseG || DEFAULT_DOSE_G} />}
                         <EspressoRecipe coffee={active} onChange={(patch) => update(active.id, patch)} baseline={baselineGrind} allCoffees={coffees} currentSetup={currentSetup} />
-                        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                          <button onClick={(e) => { e.stopPropagation(); finishPortion(active); }} style={{ flex: 1, padding: "9px 0", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>
+                        <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center" }}>
+                          <button onClick={(e) => { e.stopPropagation(); finishPortion(active); }} style={{ flex: 1, padding: "10px 0", background: "var(--accent-dark)", color: "#fff", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 600 }}>
                             {more > 0 ? "Portion done → freezer" : "Bag finished"}
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); setViewingCoffee(active); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 7, fontSize: 12 }} title="View Details">i</button>
-                          <button onClick={(e) => { e.stopPropagation(); setEditingCoffee(active); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 7, fontSize: 12 }} title="Edit">✎</button>
-                          <button onClick={(e) => { e.stopPropagation(); update(active.id, { status: "frozen" }); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--ice)", color: "var(--ice)", borderRadius: 7, fontSize: 12 }} title="Put back in freezer">❄</button>
-                          <button onClick={(e) => { e.stopPropagation(); del(active.id); }} style={{ padding: "9px 12px", background: "none", border: "1px solid var(--error)", color: "var(--error)", borderRadius: 7, fontSize: 12 }} title="Delete">✕</button>
+                          <CardMenu size={36} items={[
+                            { label: "Details", icon: "☰", onClick: () => setViewingCoffee(active) },
+                            { label: "Edit", icon: "✎", onClick: () => setEditingCoffee(active) },
+                            { label: "Back to freezer", icon: "❄", onClick: () => update(active.id, { status: "frozen" }) },
+                            { label: "Delete", icon: "✕", danger: true, onClick: () => del(active.id) },
+                          ]} />
                         </div>
                       </div>
                     );
@@ -2249,6 +2252,22 @@ export default function Home() {
             return (
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "var(--ice)", marginBottom: 8 }}>❄ Freezer — {totalFrozenPortions} portion{totalFrozenPortions !== 1 ? "s" : ""} · {totalFrozenGrams}g · {totalFrozenDoses} doses</div>
+              {sortedFreezerItems.length >= 3 && (
+                <CoverFlow
+                  coffees={sortedFreezerItems}
+                  onSelect={(c) => {
+                    setExpanded(c.id);
+                    document.getElementById(`freezer-${c.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }}
+                  caption={(c) => {
+                    const portions = c.isActiveRemaining ? c.portions.length - c.portionIndex - 1 : c.portions.length - c.portionIndex;
+                    const grams = c.isActiveRemaining
+                      ? c.portions.slice(c.portionIndex + 1).reduce((s, p) => s + p.grams, 0)
+                      : c.portions.slice(c.portionIndex).reduce((s, p) => s + p.grams, 0);
+                    return `${portions} portion${portions !== 1 ? "s" : ""} · ${grams}g${c.isActiveRemaining ? " · 1 active" : ""}`;
+                  }}
+                />
+              )}
               {allFreezerItems.length > 0 && (
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, marginBottom: 6, WebkitOverflowScrolling: "touch" }}>
                   {FREEZER_SORT_OPTIONS.map((opt) => (
@@ -2276,46 +2295,29 @@ export default function Home() {
               {sortedFreezerItems.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--muted)", fontSize: 13 }}>Freezer empty.<br /><button onClick={() => setView("scan")} style={{ marginTop: 12, padding: "8px 20px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>Scan a bag</button></div>
               ) : sortedFreezerItems.map((c) => {
-                const isExp = expanded === c.id;
+                const portionsLeft = c.isActiveRemaining ? c.portions.length - c.portionIndex - 1 : rp(c);
+                const gramsLeft = c.isActiveRemaining ? c.portions.slice(c.portionIndex + 1).reduce((s, p) => s + p.grams, 0) : rg(c);
                 return (
-                  <div key={c.id} onClick={() => setExpanded(isExp ? null : c.id)} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", marginBottom: 10, cursor: "pointer", boxShadow: isExp ? "0 3px 16px rgba(92,45,14,0.06)" : "none" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                      {c.bagColor ? <LabelCard coffee={c} size="medium" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={56} />}
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 16, fontWeight: 700, marginBottom: 3 }}>
-                          {c.name || "Unnamed"} {c.favorite && <span style={{ color: "var(--star)", fontSize: 13 }}>★</span>}
+                  <div key={c.id} id={`freezer-${c.id}`} onClick={() => setViewingCoffee(c)} style={{ background: "var(--card)", border: `1px solid ${expanded === c.id ? "var(--ice)" : "var(--border)"}`, borderRadius: 14, padding: "14px 16px", marginBottom: 10, cursor: "pointer", boxShadow: "var(--shadow-sm)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      {c.bagColor ? <LabelCard coffee={c} size="small" /> : c.labelImage && <LabelThumbnail src={c.labelImage} size={52} />}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.3 }}>
+                          {c.name || "Unnamed"} {c.favorite && <span style={{ color: "var(--star)", fontSize: 12 }}>★</span>}
                         </div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 4 }}>
-                          {c.country && <Badge>{c.country}</Badge>}
-                          {c.variety && <Badge bg="#EDE0D0">{c.variety}</Badge>}
-                          {c.process && <Badge bg="#E5DDD4">{c.process}</Badge>}
+                        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                          {portionsLeft} portion{portionsLeft !== 1 ? "s" : ""} · {gramsLeft}g · ❄ {fmt(c.addedAt)}
+                          {c.isActiveRemaining && <span style={{ color: "var(--active)", fontWeight: 600 }}> · ● 1 active</span>}
                         </div>
-                        <Stars value={c.rating || 0} onChange={(r) => update(c.id, { rating: r })} size={14} />
-                        {c.tastingNotes && <div style={{ fontSize: 10, color: "var(--muted)", fontStyle: "italic", marginTop: 4, lineHeight: 1.3 }}>"{c.tastingNotes}"</div>}
                       </div>
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--ice)" }}>{c.isActiveRemaining ? c.portions.slice(c.portionIndex + 1).reduce((s, p) => s + p.grams, 0) : rg(c)}g</div>
-                        <div style={{ fontSize: 10, color: "var(--muted)" }}>{c.isActiveRemaining ? c.portions.length - c.portionIndex - 1 : rp(c)} portion{(c.isActiveRemaining ? c.portions.length - c.portionIndex - 1 : rp(c)) !== 1 ? "s" : ""}</div>
-                        {c.isActiveRemaining && <div style={{ fontSize: 10, color: "var(--active)", fontWeight: 600, marginTop: 2 }}>● 1 active</div>}
-                        {c.roastDate && <div style={{ marginTop: 2 }}><span style={{ padding: "2px 6px", background: "var(--accent-light)", borderRadius: 4, fontSize: 10, fontWeight: 600, color: "var(--accent-dark)", fontFamily: "'Noto Sans Mono', monospace" }}>{getRoastQuarter(c.roastDate)}</span></div>}
-                        <div style={{ fontSize: 10, color: "var(--ice)", fontWeight: 600, marginTop: 2 }}>❄ {fmt(c.addedAt)}</div>
-                        <div style={{ fontSize: 9, color: "var(--muted)" }}>{daysAgo(c.addedAt)}</div>
-                      </div>
+                      <CardMenu size={30} items={[
+                        { label: "Details", icon: "☰", onClick: () => setViewingCoffee(c) },
+                        { label: "Edit", icon: "✎", onClick: () => setEditingCoffee(c) },
+                        { label: c.favorite ? "Unfavorite" : "Favorite", icon: c.favorite ? "★" : "☆", onClick: () => update(c.id, { favorite: !c.favorite }) },
+                        { label: "Archive", icon: "✓", onClick: () => archiveCoffee(c.id) },
+                      ]} />
                     </div>
-                    <div style={{ marginTop: 8, display: "flex", gap: 4, flexWrap: "wrap" }}>
-                      {c.portions.map((p, i) => {
-                        const used = i < c.portionIndex;
-                        const isCur = i === c.portionIndex;
-                        const isActive = c.isActiveRemaining && isCur;
-                        return (
-                          <div key={i} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: 600, background: used ? "#EDEAE7" : isActive ? "var(--active-bg)" : isCur ? "var(--ice-bg)" : "#F8F5F2", border: `1px solid ${used ? "#D5CEC6" : isActive ? "var(--active)" : isCur ? "var(--ice)" : "var(--border)"}`, color: used ? "#A09890" : isActive ? "var(--active)" : isCur ? "var(--ice)" : "var(--muted)", textDecoration: used ? "line-through" : "none" }}>
-                            {p.grams}g · {p.doses}d{p.buffer > 0 && !used ? ` +${p.buffer}` : ""}{isActive ? " ●" : ""}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {/* Always-visible actions — pull without needing to expand */}
-                    <div style={{ marginTop: 12, display: "flex", gap: 8 }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
                       {!c.isActiveRemaining ? (
                         <button
                           onClick={(e) => {
@@ -2323,12 +2325,11 @@ export default function Home() {
                             if (rp(c) > 1) setPullPicker(pullPicker === c.id ? null : c.id);
                             else pull(c.id);
                           }}
-                          style={{ flex: 1, padding: "10px 0", background: "var(--ice)", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700 }}
+                          style={{ width: "100%", padding: "10px 0", background: "var(--ice)", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700 }}
                         >❄ Pull a portion{rp(c) > 1 ? "…" : ""}</button>
                       ) : (
-                        <div style={{ flex: 1, padding: "10px 0", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 10, fontSize: 12, fontWeight: 600, textAlign: "center", color: "var(--active)" }}>● Active — finish portion first</div>
+                        <div style={{ padding: "10px 0", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 10, fontSize: 12, fontWeight: 600, textAlign: "center", color: "var(--active)" }}>● Active — finish portion first</div>
                       )}
-                      <button onClick={(e) => { e.stopPropagation(); setExpanded(isExp ? null : c.id); }} style={{ padding: "10px 14px", background: "none", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 10, fontSize: 12, whiteSpace: "nowrap" }}>{isExp ? "Less ▲" : "More ▼"}</button>
                     </div>
                     {/* Portion chooser — not every portion weighs the same */}
                     {pullPicker === c.id && !c.isActiveRemaining && (
@@ -2348,40 +2349,6 @@ export default function Home() {
                               <div style={{ fontSize: 9.5, color: "var(--muted)" }}>{p.doses} dose{p.doses !== 1 ? "s" : ""}{p.buffer > 0 ? ` +${p.buffer}g` : ""}</div>
                             </button>
                           ))}
-                        </div>
-                      </div>
-                    )}
-                    {isExp && (
-                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-                        {(c.bagColor || c.labelImage) && (
-                          <div style={{ marginBottom: 12, display: "flex", justifyContent: "center", gap: 12, alignItems: "center" }}>
-                            {c.bagColor && <LabelCard coffee={c} size="large" />}
-                            {c.labelImage && <LabelThumbnail src={c.labelImage} size={80} />}
-                          </div>
-                        )}
-                        {getRecipes(c).filter((r) => r.dose || r.yield || r.totalTime || r.time || r.grind).map((r, ri) => (
-                          <div key={r.id || ri} style={{ marginBottom: 10, padding: "10px 12px", background: "linear-gradient(135deg, #FDF8F4 0%, #FAF0E6 100%)", border: "1.5px solid var(--accent-light, #E8D5C4)", borderRadius: 8, boxShadow: "0 2px 6px rgba(92,45,14,0.06)" }}>
-                            <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--accent)", marginBottom: 6 }}>● {r.name || "Espresso Recipe"}</div>
-                            <div style={{ display: "flex", gap: 10, fontSize: 13, fontFamily: "'Noto Sans Mono', monospace", flexWrap: "wrap", color: "var(--text)", fontWeight: 500 }}>
-                              {r.dose && <span>{r.dose}g →</span>}
-                              {r.yield && <span>{r.yield}g</span>}
-                            </div>
-                            <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "'Noto Sans Mono', monospace", flexWrap: "wrap", color: "var(--muted)", marginTop: 4 }}>
-                              {(r.totalTime || r.time) && <span>{r.totalTime || r.time}s{r.preInfuse ? ` (pre:${r.preInfuse}s)` : ""}{r.brewTime ? ` (brew:${r.brewTime}s)` : ""}</span>}
-                              {r.grind && <span>@{r.grind}{r.feedSpeed ? ` · ${r.feedSpeed}` : ""}</span>}
-                              {r.temp && <span>{r.temp}°{r.tempUnit || "C"}</span>}
-                            </div>
-                            {r.notes && <div style={{ marginTop: 6, fontSize: 11, fontStyle: "italic", borderTop: "1px solid var(--border)", paddingTop: 6 }}>"{r.notes}"</div>}
-                          </div>
-                        ))}
-                        {[["Roaster", c.roaster], ["Producer", c.producer], ["Region", c.region], ["Roast", c.roastLevel], ["Altitude", c.altitude], ["Price", c.price]]
-                          .filter(([, v]) => v).map(([l, v]) => <div key={l}><strong style={{ color: "var(--text)" }}>{l}:</strong> {v}</div>)}
-                        {c.tastingNotes && <div style={{ marginTop: 4, fontStyle: "italic" }}>"{c.tastingNotes}"</div>}
-                        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                          <button onClick={(e) => { e.stopPropagation(); setViewingCoffee(c); }} style={{ flex: 1, padding: "8px 0", background: "none", border: "1px solid var(--border)", color: "var(--muted)", borderRadius: 7, fontSize: 12 }} title="View Details">Details</button>
-                          <button onClick={(e) => { e.stopPropagation(); setEditingCoffee(c); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 7, fontSize: 12 }} title="Edit">✎</button>
-                          <button onClick={(e) => { e.stopPropagation(); update(c.id, { favorite: !c.favorite }); }} style={{ padding: "8px 14px", background: "none", border: `1px solid ${c.favorite ? "var(--star)" : "var(--border)"}`, color: c.favorite ? "var(--star)" : "var(--muted)", borderRadius: 7, fontSize: 12, fontWeight: 600 }}>{c.favorite ? "★" : "☆"}</button>
-                          <button onClick={(e) => { e.stopPropagation(); archiveCoffee(c.id); }} style={{ padding: "8px 14px", background: "none", border: "1px solid var(--done)", color: "var(--done)", borderRadius: 7, fontSize: 12 }} title="Archive">✓</button>
                         </div>
                       </div>
                     )}
@@ -2524,19 +2491,36 @@ export default function Home() {
               onEdit={setEditingCoffee}
               onDelete={del}
               onCutout={handleCutout}
+              onUncutout={handleUncutout}
               cuttingId={cuttingId}
             />
           )}
         </div>
 
+        {/* Scan — floating action button */}
+        {view !== "scan" && (
+          <button
+            onClick={() => { setView("scan"); setExpanded(null); }}
+            aria-label="Scan a bag"
+            style={{
+              position: "fixed", right: "max(16px, calc(50% - 254px))", bottom: "calc(env(safe-area-inset-bottom, 10px) + 68px)",
+              width: 54, height: 54, borderRadius: 27, zIndex: 300,
+              background: "var(--accent-dark)", color: "#fff", border: "none",
+              fontSize: 26, fontWeight: 400, lineHeight: 1,
+              boxShadow: "0 8px 20px rgba(70,44,23,0.35)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >+</button>
+        )}
+
         {/* Nav */}
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--card)", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "center", padding: "6px 0 env(safe-area-inset-bottom, 10px)" }}>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "center", padding: "6px 0 env(safe-area-inset-bottom, 10px)", zIndex: 290 }}>
           <div style={{ display: "flex", maxWidth: 540, width: "100%" }}>
             {nav.map((n) => (
               <button key={n.key} onClick={() => { setView(n.key); setExpanded(null); }} style={{
                 flex: 1, padding: "8px 0 4px", background: "none", border: "none",
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-                color: view === n.key ? "var(--accent-dark)" : "var(--muted)", transition: "color 0.2s",
+                color: activeTab === n.key ? "var(--accent-dark)" : "var(--muted)", transition: "color 0.2s",
               }}>
                 <span style={{ fontSize: 18, lineHeight: 1 }}>{n.icon}</span>
                 <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>{n.label}</span>

@@ -1,6 +1,65 @@
 // Overview component
 import { getRecipes } from "../lib/recipes";
+import { machineById, BASKETS } from "../lib/equipment";
 import LatteArtStrip from "./LatteArtStrip";
+
+// ─── Equipment Bar ───
+// The setup you're brewing on, right at the top: machine on the left, and the
+// portafilter as a one-tap switch (stock 18g ↔ Unifilter 20g).
+function EquipmentBar({ machineId, basketId, onBasketChange, onOpenSettings }) {
+  const machine = machineById(machineId);
+  return (
+    <div style={{
+      background: "var(--card)", border: "1px solid var(--border)", borderRadius: 16,
+      padding: "12px 14px", boxShadow: "var(--shadow-sm)",
+      display: "flex", alignItems: "center", gap: 12,
+    }}>
+      <button
+        onClick={onOpenSettings}
+        title="Change machine"
+        style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: 0, textAlign: "left", minWidth: 0 }}
+      >
+        <img
+          src={machine.image}
+          alt={machine.name}
+          style={{ width: 52, height: 52, objectFit: "contain", flexShrink: 0, filter: "drop-shadow(0 3px 6px rgba(32,27,22,0.2))" }}
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
+        />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)" }}>Brewing on</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{machine.short}</div>
+        </div>
+      </button>
+      <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexShrink: 0 }}>
+        {BASKETS.map((b) => {
+          const selected = b.id === basketId;
+          return (
+            <button
+              key={b.id}
+              onClick={() => !selected && onBasketChange(b.id)}
+              title={b.name}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                padding: "6px 9px", borderRadius: 10,
+                background: selected ? "var(--accent-light)" : "var(--bg)",
+                border: selected ? "1.5px solid var(--accent-dark)" : "1.5px solid var(--border)",
+                opacity: selected ? 1 : 0.7,
+              }}
+            >
+              {b.image && (
+                <img src={b.image} alt={b.name} style={{ width: 30, height: 30, objectFit: "contain" }}
+                  onError={(e) => { e.currentTarget.style.display = "none"; }} />
+              )}
+              <span style={{ fontSize: 8.5, fontWeight: 700, color: selected ? "var(--accent-dark)" : "var(--muted)", whiteSpace: "nowrap" }}>
+                {b.short}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ─── Country Codes ───
 const COUNTRY_CODES = {
@@ -198,13 +257,12 @@ function NowBrewing({ coffee, onUseDose, onPull, recipeSlot }) {
 
   const { name, roaster, country, region, variety, process, roastLevel, altitude, tastingNotes, dosesLeft, gramsLeft, daysSincePulled, remainingPortions, isStale, bagColor, labelImage } = coffee;
 
+  // One calm chip row — the full story lives in the detail modal.
   const chips = [
     country && region ? `${region}, ${country}` : country || region,
     variety,
     process,
-    roastLevel && `${roastLevel} roast`,
-    altitude,
-  ].filter(Boolean);
+  ].filter(Boolean).slice(0, 3);
 
   return (
     <div style={{
@@ -687,29 +745,44 @@ function GrindSparkline({ history, width = 120, height = 36 }) {
 
 // ─── Main Overview Component ───
 
-export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewResting, latteArt, recipeSlot }) {
+// ─── Up Next (compact) ───
+function UpNext({ coffees, onPull, onViewFreezer }) {
+  if (!coffees || coffees.length === 0) return null;
+  return (
+    <div>
+      <SectionHeader icon="❄" title="Up Next" color="var(--ice)" />
+      {coffees.map((c) => {
+        const portions = c.portions.length - c.portionIndex;
+        const grams = c.portions.slice(c.portionIndex).reduce((s, p) => s + p.grams, 0);
+        return (
+          <div key={c.id} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "10px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10, boxShadow: "var(--shadow-sm)" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "Unnamed"}</div>
+              <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{portions} portion{portions !== 1 ? "s" : ""} · {grams}g</div>
+            </div>
+            <button onClick={() => onPull(c.id)} style={{ padding: "7px 16px", background: "var(--ice)", color: "#fff", border: "none", borderRadius: 8, fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Pull</button>
+          </div>
+        );
+      })}
+      <button onClick={onViewFreezer} style={{ width: "100%", padding: "8px 0", background: "none", border: "1px dashed var(--border)", borderRadius: 10, fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>
+        Open freezer
+      </button>
+    </div>
+  );
+}
+
+// Home shows today: equipment, the bag in play, what's next, and how your
+// grind is drifting. Everything historical lives in <Insights />.
+export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewResting, onViewInsights, upNext, onPull, recipeSlot, equipment }) {
   const {
     activeCoffee,
     restingCoffees,
     restingCount,
     readyToFreezeCount,
-    freezerGrams,
     freezerPortions,
-    freezerDoses,
-    estimatedDaysLeft,
-    totalConsumed,
     totalFinished,
-    totalDoses,
-    avgRating,
     avgGrind,
     grindHistory,
-    topRated,
-    topRoasters,
-    topCountries,
-    byCountry,
-    byVariety,
-    recentlyAdded,
-    lastFinished,
   } = stats;
 
   const isEmpty = totalFinished === 0 && freezerPortions === 0 && !activeCoffee;
@@ -724,7 +797,7 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
         <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>●</div>
         <div style={{ fontSize: 15, marginBottom: 8 }}>Welcome to Expertso</div>
         <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-          Start by scanning or adding your first coffee bag.<br />
+          Tap + to scan your first coffee bag.<br />
           Your stats will appear here.
         </div>
       </div>
@@ -733,6 +806,16 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Equipment */}
+      {equipment && (
+        <EquipmentBar
+          machineId={equipment.machineId}
+          basketId={equipment.basketId}
+          onBasketChange={equipment.onBasketChange}
+          onOpenSettings={equipment.onOpenSettings}
+        />
+      )}
+
       {/* Now Brewing Hero */}
       <div>
         <SectionHeader icon="●" title="Now Brewing" color="var(--active)" />
@@ -743,6 +826,11 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
           recipeSlot={recipeSlot}
         />
       </div>
+
+      {/* Up Next */}
+      {upNext && upNext.length > 0 && (
+        <UpNext coffees={upNext} onPull={onPull} onViewFreezer={onPullFromFreezer} />
+      )}
 
       {/* Average Grind + drift sparkline */}
       {avgGrind !== null && (
@@ -793,64 +881,69 @@ export default function Overview({ stats, onUseDose, onPullFromFreezer, onViewRe
         />
       )}
 
-      {/* Freezer Stats */}
+      {/* Everything historical */}
+      {onViewInsights && (
+        <button
+          onClick={onViewInsights}
+          style={{
+            width: "100%", padding: "13px 0", background: "var(--card)",
+            border: "1px solid var(--border)", borderRadius: 14, fontSize: 12.5,
+            fontWeight: 600, color: "var(--accent-dark)", boxShadow: "var(--shadow-sm)",
+          }}
+        >
+          Insights — stats, favorites & latte art →
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Insights — the historical view (reached from Home) ───
+export function Insights({ stats, latteArt, onBack }) {
+  const {
+    freezerGrams,
+    freezerPortions,
+    freezerDoses,
+    totalConsumed,
+    totalFinished,
+    totalDoses,
+    avgRating,
+    topRated,
+    topRoasters,
+    topCountries,
+    byCountry,
+    byVariety,
+    recentlyAdded,
+    lastFinished,
+  } = stats;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}>Insights</div>
+        <button onClick={onBack} style={{ padding: "6px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>
+          ← Home
+        </button>
+      </div>
+
       {freezerPortions > 0 && (
-        <FreezerStats
-          grams={freezerGrams}
-          portions={freezerPortions}
-          doses={freezerDoses}
-        />
+        <FreezerStats grams={freezerGrams} portions={freezerPortions} doses={freezerDoses} />
       )}
 
-      {/* Consumption Stats */}
       {totalFinished > 0 && (
-        <ConsumptionStats
-          consumed={totalConsumed}
-          finished={totalFinished}
-          doses={totalDoses}
-          avgRating={avgRating}
-        />
+        <ConsumptionStats consumed={totalConsumed} finished={totalFinished} doses={totalDoses} avgRating={avgRating} />
       )}
 
-      {/* Favorites */}
-      <Favorites
-        topRated={topRated}
-        topRoasters={topRoasters}
-        topCountries={topCountries}
-      />
+      <Favorites topRated={topRated} topRoasters={topRoasters} topCountries={topCountries} />
 
-      {/* Origin Breakdown */}
-      {byCountry.length > 0 && (
-        <BreakdownChart
-          icon="◯"
-          title="Origins"
-          data={byCountry}
-        />
-      )}
+      {byCountry.length > 0 && <BreakdownChart icon="◯" title="Origins" data={byCountry} />}
+      {byVariety.length > 0 && <BreakdownChart icon="◦" title="Varieties" data={byVariety} />}
 
-      {/* Variety Breakdown */}
-      {byVariety.length > 0 && (
-        <BreakdownChart
-          icon="◦"
-          title="Varieties"
-          data={byVariety}
-        />
-      )}
-
-      {/* Latte Art */}
       {latteArt && (
-        <LatteArtStrip
-          pours={latteArt.pours}
-          createPour={latteArt.createPour}
-          deletePour={latteArt.deletePour}
-        />
+        <LatteArtStrip pours={latteArt.pours} createPour={latteArt.createPour} deletePour={latteArt.deletePour} />
       )}
 
-      {/* Recent Activity */}
-      <RecentActivity
-        recentlyAdded={recentlyAdded}
-        lastFinished={lastFinished}
-      />
+      <RecentActivity recentlyAdded={recentlyAdded} lastFinished={lastFinished} />
     </div>
   );
 }
