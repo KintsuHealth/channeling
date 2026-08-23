@@ -1516,18 +1516,30 @@ function EditableResult({ data, onChange, onSubmit, onCancel, doseG, setDoseG, b
           ✓ Will be portioned and frozen immediately
         </div>
       )}
-      {/* Duplicate warning banner */}
-      {duplicateMatch && (
-        <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--active-bg)", border: "1px solid var(--active)", borderRadius: 8, fontSize: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--active)", fontWeight: 600 }}>
-            <span>⚠</span>
-            <span>Similar coffee found: {duplicateMatch.match.name}</span>
+      {/* Repeat purchase — show what the previous bag already knows */}
+      {duplicateMatch && (() => {
+        const prev = duplicateMatch.match;
+        const rec = primaryRecipe(prev);
+        const where = { resting: "resting", frozen: "in the freezer", active: "on the counter", done: "in the museum" }[prev.status] || "on the shelf";
+        return (
+          <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--accent-light)", border: "1px solid var(--accent)", borderRadius: 8, fontSize: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--accent-dark)", fontWeight: 600 }}>
+              <span>◐</span>
+              <span>You&apos;ve had this before</span>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>
+              {prev.name} — {where}
+              {rec?.grind && <> · settled at <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>@{rec.grind}</span></>}
+              {rec?.dose && rec?.yield ? ` · ${rec.dose}g→${rec.yield}g` : ""}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--accent-dark)", marginTop: 4 }}>
+              {duplicateMatch.isSameBatch
+                ? "Same roast date — you can add these portions to that bag."
+                : "New batch — you'll be offered its recipe and notes."}
+            </div>
           </div>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
-            {duplicateMatch.isSameBatch ? "Same batch detected — you can add portions to existing." : "Different batch — you can copy the existing recipe."}
-          </div>
-        </div>
-      )}
+        );
+      })()}
       <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
         <button onClick={(e) => { e.stopPropagation(); if (f.name && grams > 0) onSubmit({ ...f, wholeBag, status: addAs, targetRestDays: restingDays, dosesPerPortion, _duplicateMatch: duplicateMatch }); }}
           style={{ flex: 1, padding: "9px 0", background: f.name && grams > 0 ? (addAs === 'resting' ? "var(--accent)" : "var(--accent-dark)") : "var(--border)", color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600 }}>
@@ -1893,9 +1905,13 @@ export default function Home() {
       portionIndex: 0,
       dosesUsed: 0,
       status,
-      espresso: null,
-      recipes: [],
-      favorite: false,
+      // Default to a blank slate, but let a repeat purchase arrive carrying the
+      // previous bag's dial-in — these used to overwrite it unconditionally, so
+      // "copy recipe" copied nothing.
+      espresso: data.espresso ?? null,
+      recipes: data.recipes ?? [],
+      dialInNotes: data.dialInNotes ?? null,
+      favorite: data.favorite ?? false,
       doseG: doseG || DEFAULT_DOSE_G,
       labelImage,
       grindOffsetPrediction: prediction.offset,
@@ -1964,11 +1980,16 @@ export default function Home() {
     if (!duplicateMatch || !pendingCoffeeData) return;
     const existing = duplicateMatch.match;
 
-    // Add new coffee with copied recipe settings
+    // A repeat purchase inherits what dialling the last bag taught us: the
+    // recipes, the notes explaining them, and whether this is a favourite.
+    // Rating stays unset — that scores the cup in front of you, not the one
+    // you finished.
     await addCoffee({
       ...pendingCoffeeData,
       recipes: getRecipes(existing),
       espresso: null,
+      dialInNotes: existing.dialInNotes || null,
+      favorite: !!existing.favorite,
     }, 0);
 
     // Reset state

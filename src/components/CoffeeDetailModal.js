@@ -363,7 +363,10 @@ export function CoffeeDetailModal({ coffee, onClose, onEdit, onArchive, onUpdate
         {coffee.portions && coffee.portions.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--muted)", marginBottom: 10 }}>
-              Portions ({coffee.gramsTotal}g total)
+              {/* Sum the portions rather than trusting gramsTotal: after a
+                  same-batch merge gramsTotal counts every gram ever added,
+                  while the portions hold only what is actually left. */}
+              Portions ({coffee.portions.reduce((s, p) => s + (p.grams || 0), 0)}g total)
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {coffee.portions.map((p, i) => {

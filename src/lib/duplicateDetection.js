@@ -1,39 +1,14 @@
 import { getRoastQuarter, isSameBatch } from './roastBatch';
 import { optimizePortions } from './portions';
 import { primaryRecipe } from './recipes';
+import { sameCoffee } from './coffeeMatch';
 
-// Normalize string for comparison (lowercase, trim, remove extra spaces, strip accents)
-function normalize(str) {
-  if (!str) return '';
-  return str
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, ''); // Strip accents
-}
-
-// Check if two strings are similar enough to be considered a match
-function isMatch(str1, str2) {
-  return normalize(str1) === normalize(str2);
-}
-
-// Find duplicate coffees matching name + roaster
-// Returns { match, isSameBatch } or null if no match
+// Find previous bags of the same coffee, in any state \u2014 resting, freezer,
+// active or archived. Returns { match, isSameBatch } or null if no match.
 export function findDuplicateCoffee(newCoffee, allCoffees) {
   if (!newCoffee?.name || !allCoffees?.length) return null;
 
-  const newName = normalize(newCoffee.name);
-  const newRoaster = normalize(newCoffee.roaster);
-
-  // Find all matches (same name + roaster)
-  const matches = allCoffees.filter(c => {
-    const nameMatch = isMatch(c.name, newCoffee.name);
-    // If no roaster on either, match on name only
-    // If both have roaster, they must match
-    const roasterMatch = !newRoaster || !normalize(c.roaster) || isMatch(c.roaster, newCoffee.roaster);
-    return nameMatch && roasterMatch;
-  });
+  const matches = allCoffees.filter(c => sameCoffee(c, newCoffee));
 
   if (matches.length === 0) return null;
 
@@ -43,14 +18,26 @@ export function findDuplicateCoffee(newCoffee, allCoffees) {
     return { match: sameBatchMatch, isSameBatch: true };
   }
 
-  // Return most recently added match
+  // Most recent first...
   const sortedMatches = [...matches].sort((a, b) => {
     const dateA = new Date(a.addedAt || a.frozenAt || 0);
     const dateB = new Date(b.addedAt || b.frozenAt || 0);
     return dateB - dateA;
   });
 
-  return { match: sortedMatches[0], isSameBatch: false };
+  // ...but the point of surfacing a previous bag is to inherit its dial-in, and
+  // the newest bag is often the one you haven't dialed yet. Prefer the most
+  // recent bag that actually carries a recipe, and only fall back to plain
+  // recency when none of them do.
+  const withRecipe = sortedMatches.find(hasUsableRecipe);
+
+  return { match: withRecipe || sortedMatches[0], isSameBatch: false };
+}
+
+// Same test the duplicate modal uses to decide whether there's anything to copy.
+function hasUsableRecipe(coffee) {
+  const r = primaryRecipe(coffee);
+  return !!(r?.dose || r?.yield || r?.grind);
 }
 
 // Merge new grams into existing coffee portions

@@ -4,6 +4,7 @@
 
 import { primaryEspressoRecipe } from "./recipes";
 import { recipeEquipment, learnEquipmentDelta, DEFAULT_MACHINE_ID, DEFAULT_BASKET_ID } from "./equipment";
+import { sameCoffee } from "./coffeeMatch";
 
 // Variety density/extraction table (substring match, first hit wins).
 // Negative = finer (dense or delicate/aromatic), positive = coarser.
@@ -480,16 +481,12 @@ export function calculatePersonalCalibration(allCoffees, baseline, currentSetup 
 export function findPreviousGrindSettings(coffee, allCoffees) {
   if (!coffee || !allCoffees || allCoffees.length === 0) return null;
 
+  // Same identity test the scan flow uses, so a bag flagged as a repeat
+  // purchase at scan time is never treated as a stranger at dial-in time.
   const matches = allCoffees.filter(c => {
     if (c.id === coffee.id) return false;
     if (!primaryEspressoRecipe(c)?.grind) return false;
-
-    const sameName = c.name && coffee.name &&
-      c.name.toLowerCase() === coffee.name.toLowerCase();
-    const sameRoaster = c.roaster && coffee.roaster &&
-      c.roaster.toLowerCase() === coffee.roaster.toLowerCase();
-
-    return sameName && sameRoaster;
+    return sameCoffee(c, coffee);
   });
 
   if (matches.length === 0) return null;
